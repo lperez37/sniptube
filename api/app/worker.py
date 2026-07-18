@@ -26,9 +26,18 @@ def parse_redis_url(url: str) -> RedisSettings:
     )
 
 
+async def _startup(ctx: dict) -> None:
+    """Sweep jobs orphaned by a previous unclean shutdown."""
+    from app.database import fail_stale_jobs
+    swept = await fail_stale_jobs()
+    if swept:
+        logging.getLogger(__name__).info("Swept %d stale jobs on startup", swept)
+
+
 class WorkerSettings:
     functions = [download_video, create_clip, create_gif, extract_audio_task, redownload_video]
     cron_jobs = [cron(trim_old_videos, hour=3, minute=0)]
+    on_startup = _startup
     redis_settings = parse_redis_url(settings.redis_url)
     max_jobs = settings.worker_concurrency
     job_timeout = 600  # 10 minutes max per job

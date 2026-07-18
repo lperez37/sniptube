@@ -37,6 +37,23 @@ function app() {
       return this.searchState === 'loading' || this.searchState === 'loadingMore';
     },
 
+    // Background downloads: jobId -> {video_id, label, progress, status}.
+    // Shown in the header indicator; survives navigation and page reloads
+    // (rehydrated from GET /jobs/active on init).
+    activeDownloads: {},
+    downloadsMenuOpen: false,
+
+    get activeDownloadCount() {
+      return Object.keys(this.activeDownloads).length;
+    },
+
+    // Bulk download selection on search results: youtube_id -> result
+    selectedResults: {},
+
+    get selectedCount() {
+      return Object.keys(this.selectedResults).length;
+    },
+
     // Clip/GIF controls
     clipStartDisplay: '0:00',
     clipEndDisplay: '0:10',
@@ -101,6 +118,61 @@ function app() {
           this.page = 'download';
           this._restoreSearchFromHash(hash);
         }
+      }
+      this._resumeActiveDownloads();
+    },
+
+    // --- Background download tracking ---
+    _trackDownload(jobId, videoId, label, onUpdate = null) {
+      this.activeDownloads = {
+        ...this.activeDownloads,
+        [jobId]: { video_id: videoId, label, progress: 0, status: 'queued' },
+      };
+      this.pollJob(jobId, (job) => {
+        if (this.activeDownloads[jobId]) {
+          this.activeDownloads = {
+            ...this.activeDownloads,
+            [jobId]: { ...this.activeDownloads[jobId], progress: job.progress ?? 0, status: job.status },
+          };
+        }
+        if (job.status === 'completed' || job.status === 'failed') {
+          const { [jobId]: _done, ...rest } = this.activeDownloads;
+          this.activeDownloads = rest;
+          if (this.activeDownloadCount === 0) this.downloadsMenuOpen = false;
+        }
+        onUpdate?.(job);
+      }, { scope: 'download' });
+    },
+
+    async _resumeActiveDownloads() {
+      // Rehydrate download tracking after a page reload: any download job
+      // still queued/running on the server reappears in the header indicator.
+      try {
+        const res = await fetch(`${API}/jobs/active?type=download`);
+        if (!res.ok) return;
+        const jobs = await res.json();
+        for (const job of jobs) {
+          if (this.activeDownloads[job.id]) continue;
+          const label = this._labelFromUrl(job.params?.url) || job.video_id;
+          this._trackDownload(job.id, job.video_id, label, (j) => {
+            if (j.status === 'completed') {
+              this.toast('Download complete!', 'success');
+              this.loadVideos();
+            } else if (j.status === 'failed') {
+              this.toast('Download failed: ' + (j.error || ''), 'error');
+            }
+          });
+        }
+      } catch (e) { /* non-fatal */ }
+    },
+
+    _labelFromUrl(url) {
+      if (!url) return null;
+      try {
+        const u = new URL(url);
+        return u.searchParams.get('v') || u.pathname.slice(1) || url;
+      } catch {
+        return url;
       }
     },
 
@@ -302,9 +374,9 @@ function app() {
           return;
         }
         this.currentDownload = { ...data, status: 'queued', progress: 0 };
-        // scope 'download': keeps polling across page navigation so the
-        // downloading flag can never get stuck on true.
-        this.pollJob(data.job_id, (job) => {
+        // Tracked as a background download: survives navigation, shows in the
+        // header indicator, and the downloading flag can never get stuck.
+        this._trackDownload(data.job_id, data.video_id, this._labelFromUrl(url) || url, (job) => {
           this.currentDownload = { ...this.currentDownload, ...job };
           if (job.status === 'completed' || job.status === 'failed') {
             this.downloading = false;
@@ -315,7 +387,7 @@ function app() {
               this.toast('Download failed: ' + (job.error || ''), 'error');
             }
           }
-        }, { scope: 'download' });
+        });
       } catch (e) {
         this.toast('Request failed', 'error');
         this.downloading = false;
@@ -403,6 +475,7 @@ function app() {
         }
         if (requestedPage === 1) {
           this.searchResults = data.results;
+          this.selectedResults = {};
         } else {
           // The server re-fetches from YouTube when a later page needs more
           // entries than cached, and YouTube's ordering shifts between calls -
@@ -431,11 +504,11 @@ function app() {
       }
     },
 
-    async downloadFromSearch(result) {
+    async downloadFromSearch(result, opts = {}) {
       // Already in the library: open its detail page. Back returns to this
       // search because the query lives in the location hash.
       if (result.already_downloaded && result.video_id) {
-        this.viewVideo(result.video_id);
+        if (!opts.quiet) this.viewVideo(result.video_id);
         return;
       }
       // Download in place - results stay visible so more can be queued.
@@ -459,8 +532,8 @@ function app() {
           result.video_id = data.video_id;
           return;
         }
-        this.toast('Download queued', 'info');
-        this.pollJob(data.job_id, (job) => {
+        if (!opts.quiet) this.toast('Download queued', 'info');
+        this._trackDownload(data.job_id, data.video_id, result.title || result.youtube_id, (job) => {
           if (job.status === 'completed') {
             result._downloading = false;
             result.already_downloaded = true;
@@ -471,10 +544,35 @@ function app() {
             result._downloading = false;
             this.toast('Download failed: ' + (job.error || ''), 'error');
           }
-        }, { scope: 'download' });
+        });
       } catch (e) {
         result._downloading = false;
         this.toast('Request failed', 'error');
+      }
+    },
+
+    // --- Bulk download selection ---
+    toggleSelect(result) {
+      if (this.selectedResults[result.youtube_id]) {
+        const { [result.youtube_id]: _removed, ...rest } = this.selectedResults;
+        this.selectedResults = rest;
+      } else {
+        this.selectedResults = { ...this.selectedResults, [result.youtube_id]: result };
+      }
+    },
+
+    clearSelection() {
+      this.selectedResults = {};
+    },
+
+    downloadSelected() {
+      const items = Object.values(this.selectedResults)
+        .filter((r) => !r.already_downloaded && !r._downloading);
+      this.clearSelection();
+      if (!items.length) return;
+      this.toast(`Queued ${items.length} download${items.length !== 1 ? 's' : ''}`, 'info');
+      for (const result of items) {
+        this.downloadFromSearch(result, { quiet: true });
       }
     },
 
@@ -496,6 +594,7 @@ function app() {
       this.searchAttempted = false;
       this.searchPage = 1;
       this.searchHasMore = false;
+      this.selectedResults = {};
     },
 
     clearSearch() {

@@ -1,9 +1,37 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
-from app.database import get_job
+from app.database import get_job, list_active_jobs
 from app.models import JobResponse
 
 router = APIRouter()
+
+
+# NOTE: must be declared before /{job_id}, or "active" would match as a job id.
+@router.get("/active", response_model=list[JobResponse],
+            summary="List active jobs",
+            response_description="All queued or running jobs, newest first")
+async def list_active_jobs_endpoint(
+    type: str | None = Query(None, description="Filter by job type, e.g. 'download'"),
+):
+    """List all jobs currently queued or running.
+
+    Lets clients resume progress tracking after a page reload - e.g. the web UI
+    polls every download job returned here so background downloads stay visible.
+    """
+    jobs = await list_active_jobs(type)
+    return [
+        JobResponse(
+            id=j["id"],
+            video_id=j["video_id"],
+            type=j["type"],
+            params=j["params"],
+            status=j["status"],
+            progress=j["progress"],
+            created_at=j["created_at"],
+            updated_at=j["updated_at"],
+        )
+        for j in jobs
+    ]
 
 
 @router.get("/{job_id}", response_model=JobResponse,

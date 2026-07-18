@@ -1,6 +1,6 @@
 // Bump the version on every deploy that changes the app shell - the activate
 // handler drops old caches, so clients pick up new HTML/JS/CSS on next load.
-const CACHE_NAME = 'sniptube-v2';
+const CACHE_NAME = 'sniptube-v3';
 
 const APP_SHELL = [
   '/',

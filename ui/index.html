@@ -100,9 +100,30 @@
         <img src="/logo.svg" alt="" class="header-logo"> Sniptube
       </h1>
       <nav>
+        <!-- Background downloads indicator -->
+        <div class="dl-indicator" x-show="activeDownloadCount" x-transition.opacity style="display:none">
+          <button class="dl-indicator-btn" @click="downloadsMenuOpen = !downloadsMenuOpen"
+                  :aria-expanded="downloadsMenuOpen" aria-label="Active downloads" type="button">
+            <span class="spinner spinner-small" aria-hidden="true"></span>
+            <span x-text="activeDownloadCount"></span>
+          </button>
+          <div class="dl-menu" x-show="downloadsMenuOpen" x-transition
+               @click.outside="downloadsMenuOpen = false" style="display:none">
+            <p class="dl-menu-title">Downloading</p>
+            <template x-for="[jobId, dl] in Object.entries(activeDownloads)" :key="jobId">
+              <div class="dl-item">
+                <span class="dl-item-label" x-text="dl.label"></span>
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="'width:' + (dl.progress || 0) + '%'"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
         <a class="btn btn-ghost" href="/docs" target="_blank">API</a>
-        <button class="btn btn-primary" @click="navigate('download')">
-          New
+        <button class="btn btn-primary btn-icon-label" @click="navigate('download')"
+                aria-label="Search and download" title="Search &amp; download">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </button>
       </nav>
     </div>
@@ -213,6 +234,14 @@
                 <span class="downloading-overlay" x-show="result._downloading">
                   <span class="spinner" aria-hidden="true"></span> Downloading&hellip;
                 </span>
+                <button class="select-toggle" type="button"
+                        x-show="!result.already_downloaded && !result._downloading"
+                        :class="{'selected': !!selectedResults[result.youtube_id]}"
+                        @click.stop="toggleSelect(result)"
+                        :aria-pressed="!!selectedResults[result.youtube_id]"
+                        aria-label="Select for bulk download">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
               </div>
               <div class="video-info">
                 <h3 x-text="result.title || 'Untitled'"></h3>
@@ -232,6 +261,19 @@
               </div>
             </div>
           </template>
+        </div>
+
+        <!-- Bulk download bar (fixed bottom sheet on mobile) -->
+        <div class="bulk-bar" x-show="selectedCount" x-transition style="display:none">
+          <span class="bulk-bar-count"
+                x-text="selectedCount + ' video' + (selectedCount !== 1 ? 's' : '') + ' selected'"></span>
+          <div class="bulk-bar-actions">
+            <button class="btn btn-ghost btn-small" @click="clearSelection()">Cancel</button>
+            <button class="btn btn-primary btn-small" @click="downloadSelected()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download all
+            </button>
+          </div>
         </div>
 
         <!-- Load more -->

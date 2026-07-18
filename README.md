@@ -184,6 +184,14 @@ curl -X POST http://localhost:8030/videos/{videoId}/gifs \
 | `quality`   | string | `"high"` | `"high"` = two-pass palette with Floyd-Steinberg dithering (best quality). `"fast"` = single-pass (smaller file). |
 | `crop_pct`  | int    | `null`   | Crop to center N% of frame (10-100). |
 
+### List Active Jobs
+
+```bash
+curl "http://localhost:8030/jobs/active?type=download"
+```
+
+Returns all currently queued/running jobs (optionally filtered by `type`). Used by the web UI to resume download progress tracking after a page reload.
+
 ### Poll Job Status
 
 ```bash
@@ -320,6 +328,8 @@ Open **http://localhost:8030** in a browser. Responsive dark interface (Inter + 
 - **Client-side routing** — hash-based URLs (`#/video/{id}`, `#/download`) so refreshing the page preserves your location; browser back/forward works
 - **Library page** — video cards with thumbnails, skeleton loading shimmer, duration badges, language/subtitle indicators, heart overlay on protected videos, Prune button in header to clean up old unprotected videos
 - **Download page** — dual-purpose input: paste a YouTube URL (auto-submits) or just type — **search results appear as you type** (debounced, race-free). Type `@handle` to browse a channel's videos. Filters (duration, sort), skeleton loading states, inline empty/error states, and append-style "Load more" pagination served from a server-side cache. Result cards show thumbnails, view counts, upload dates, description snippets, and "In Library" badges; clicking a result downloads it **in place** (results stay visible so you can queue several), or opens the detail page if already downloaded. Clicking an uploader name lists their channel. Search state lives in the URL hash, so reload, back-navigation, and deep links restore the search.
+- **Bulk downloads** — tick the checkmark on any number of search results and hit "Download all"; a bottom action bar (thumb-reachable bottom sheet on mobile) queues them all at once.
+- **Background downloads** — downloads keep running server-side no matter what the browser does. A header indicator shows active downloads with per-item progress, follows you across pages, and **survives page reloads** (the UI rehydrates from `GET /jobs/active`). Stale jobs orphaned by a server restart are swept to `failed` automatically on startup.
 - **Video detail** — two-column layout: left column has HTML5 video player, title/metadata with heart (protect) button, and collapsible transcript panel (3-line clamp with "Show more"); right column has time range + crop controls, Original download button, resolution button grid (native YouTube streams at 4K/1440p/720p/480p/etc. via yt-dlp with "Detect" fallback for older videos; source resolution is filtered out since it's the Original button), accordion of action cards (Clip, GIF, Audio) with Lucide SVG icons, and a "Downloads" button that opens a slide-in panel (380px on desktop, bottom sheet on mobile) listing cached derivatives with per-item delete buttons
 - **Friendly download filenames** — derivatives download with human-readable names based on the video title (e.g. `video-title-clip-aab86e.mp4`, `video-title.mp3`)
 - **API docs** — nav bar includes an "API" link that opens the interactive Swagger UI at `/docs`

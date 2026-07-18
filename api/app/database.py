@@ -203,6 +203,70 @@ async def update_job(job_id: str, **kwargs) -> dict | None:
         await db.close()
 
 
+async def fail_stale_jobs(running_max_minutes: int = 30, queued_max_hours: int = 24) -> int:
+    """Mark orphaned jobs as failed.
+
+    A 'running' job not updated within running_max_minutes is dead (the worker's
+    job_timeout would have fired long before). A 'queued' job older than
+    queued_max_hours was lost across restarts - the threshold is generous so a
+    long legitimate bulk-download queue is never false-failed.
+    Returns the number of jobs swept. Called on API and worker startup.
+    """
+    now = datetime.now(timezone.utc)
+    running_cutoff = (now - timedelta(minutes=running_max_minutes)).isoformat()
+    queued_cutoff = (now - timedelta(hours=queued_max_hours)).isoformat()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """
+            UPDATE jobs SET status = 'failed', error = 'Orphaned by a restart', updated_at = ?
+            WHERE (status = 'running' AND updated_at < ?)
+               OR (status = 'queued' AND created_at < ?)
+            """,
+            (now.isoformat(), running_cutoff, queued_cutoff),
+        )
+        await db.commit()
+        swept = cursor.rowcount
+        # Videos stuck in 'downloading' with no live download job flip to failed
+        # so the UI stops showing them as in-progress.
+        await db.execute(
+            """
+            UPDATE videos SET status = 'failed'
+            WHERE status = 'downloading' AND id NOT IN (
+                SELECT video_id FROM jobs WHERE type = 'download' AND status IN ('queued','running')
+            )
+            """
+        )
+        await db.commit()
+        return swept
+    finally:
+        await db.close()
+
+
+async def list_active_jobs(job_type: str | None = None) -> list[dict]:
+    """All queued/running jobs, optionally filtered by type, newest first."""
+    db = await get_db()
+    try:
+        if job_type:
+            cursor = await db.execute(
+                "SELECT * FROM jobs WHERE status IN ('queued','running') AND type = ? ORDER BY created_at DESC",
+                (job_type,),
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT * FROM jobs WHERE status IN ('queued','running') ORDER BY created_at DESC"
+            )
+        rows = await cursor.fetchall()
+        results = []
+        for row in rows:
+            d = dict(row)
+            d["params"] = json.loads(d["params"]) if d["params"] else {}
+            results.append(d)
+        return results
+    finally:
+        await db.close()
+
+
 async def get_active_job(video_id: str, job_type: str) -> dict | None:
     """Most recent queued/running job of a type for a video, or None."""
     db = await get_db()

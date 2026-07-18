@@ -12,6 +12,8 @@ from app.database import init_db
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    from app.database import fail_stale_jobs
+    await fail_stale_jobs()
     yield
     from app.queue import close_arq_pool
     await close_arq_pool()
