@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Rounded purple background -->
+  <rect width="32" height="32" rx="6" fill="#b07ee8"/>
+  <!-- Play triangle top half (snipped at center gap) -->
+  <polygon points="11,7 22.7,14.5 11,14.5" fill="#11111b"/>
+  <!-- Play triangle bottom half -->
+  <polygon points="11,17.5 22.7,17.5 11,25" fill="#11111b"/>
+</svg>

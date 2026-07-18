@@ -1,0 +1,23 @@
+# Runtime data (downloaded videos, SQLite database)
+data/
+
+# Cloudflare tunnel credentials and per-instance config - NEVER commit.
+# Keep your tunnel service in docker-compose.override.yml (also ignored).
+cloudflared/
+docker-compose.override.yml
+
+# Private instance notes
+CLAUDE.md
+SKILL.md
+TAILSCALE.md
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Tooling / OS noise
+.playwright-mcp/
+.claude/settings.local.json
+.DS_Store

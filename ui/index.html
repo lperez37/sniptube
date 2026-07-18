@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sniptube</title>
+  <meta name="description" content="Self-hosted YouTube clip and GIF generator">
+  <meta name="theme-color" content="#b07ee8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Sniptube">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('app', app);
+    });
+  </script>
+  <!-- Alpine is vendored locally: no CDN dependency, works offline, no supply-chain risk.
+       SECURITY NOTE: all API data is rendered via x-text / attribute bindings, which
+       escape HTML. Never switch a binding to x-html - titles and channel names are
+       attacker-influenced YouTube strings. -->
+  <script defer src="/vendor/alpine-collapse.min.js"></script>
+  <script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body>
+
+<div id="app" x-data="app" x-init="init()"
+     @keydown.escape.window="showDeleteModal = false; showDeleteDerivativeModal = false; showPruneModal = false">
+
+  <!-- Toast notifications -->
+  <div class="toast-container" role="status" aria-live="polite">
+    <template x-for="toast in toasts" :key="toast.id">
+      <div class="toast" :class="toast.type" x-show="toast.visible"
+           x-transition:enter="toast-enter"
+           x-transition:leave="toast-leave">
+        <span class="toast-message" x-text="toast.message"></span>
+        <a x-show="toast.link" :href="toast.link" target="_blank" class="toast-link"
+           @click.stop>Download</a>
+        <button class="toast-close" @click="dismissToast(toast.id)"
+                aria-label="Dismiss notification" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </template>
+  </div>
+
+  <!-- Delete confirmation modal -->
+  <div class="modal-overlay" x-show="showDeleteModal" x-transition.opacity
+       @click.self="showDeleteModal = false" style="display:none"
+       role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+    <div class="modal" x-show="showDeleteModal" x-transition>
+      <h3 id="delete-modal-title">Delete Video</h3>
+      <p>Are you sure you want to delete <strong x-text="currentVideo?.title || 'this video'"></strong>? This will remove the source file and all derivatives. This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" @click="showDeleteModal = false">Cancel</button>
+        <button class="btn btn-danger" @click="confirmDeleteVideo()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete derivative confirmation modal -->
+  <div class="modal-overlay" x-show="showDeleteDerivativeModal" x-transition.opacity
+       @click.self="showDeleteDerivativeModal = false" style="display:none"
+       role="dialog" aria-modal="true" aria-labelledby="delete-deriv-modal-title">
+    <div class="modal" x-show="showDeleteDerivativeModal" x-transition>
+      <h3 id="delete-deriv-modal-title">Delete Download</h3>
+      <p>Delete this <strong x-text="derivativeToDelete?.type || 'file'"></strong> (<span x-text="formatParams(derivativeToDelete?.params)"></span>)? This frees up disk space. You can regenerate it later.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" @click="showDeleteDerivativeModal = false">Cancel</button>
+        <button class="btn btn-danger" @click="confirmDeleteDerivative()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prune confirmation modal -->
+  <div class="modal-overlay" x-show="showPruneModal" x-transition.opacity
+       @click.self="showPruneModal = false" style="display:none"
+       role="dialog" aria-modal="true" aria-labelledby="prune-modal-title">
+    <div class="modal" x-show="showPruneModal" x-transition>
+      <h3 id="prune-modal-title">Prune Library</h3>
+      <p>This will permanently delete all unprotected videos older than 14 days. Protected videos are kept. This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" @click="showPruneModal = false">Cancel</button>
+        <button class="btn btn-danger" @click="showPruneModal = false; pruneVideos()">Prune</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="header-inner">
+      <h1 @click="navigate('list')" style="cursor:pointer">
+        <img src="/logo.svg" alt="" class="header-logo"> Sniptube
+      </h1>
+      <nav>
+        <a class="btn btn-ghost" href="/docs" target="_blank">API</a>
+        <button class="btn btn-primary" @click="navigate('download')">
+          New
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Download Page -->
+    <div x-show="page === 'download'" x-transition>
+      <div class="page-section">
+        <h2>Download Video</h2>
+        <div class="download-form">
+          <div class="input-group">
+            <div class="input-wrap">
+              <input type="text" x-model="downloadUrl"
+                     x-ref="searchInput"
+                     placeholder="Paste YouTube URL or type to search..."
+                     @keydown.enter="submitAction()" @paste="onPaste($event)"
+                     @input="onDownloadInput()"
+                     @keydown.escape="clearSearch()"
+                     :disabled="downloading" autofocus>
+              <button class="input-clear" x-show="downloadUrl.trim()" @click="clearSearch()"
+                      aria-label="Clear" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <button class="btn btn-primary" @click="submitAction()"
+                    :disabled="!downloadUrl.trim() || downloading">
+              <span x-show="!downloading && !searching" x-text="searchMode ? 'Search' : 'Download'"></span>
+              <span x-show="downloading || searching" class="spinner" aria-hidden="true"></span>
+            </button>
+          </div>
+          <p class="hint">Paste a youtube.com / youtu.be link to download, or just type to search &mdash; results appear as you type</p>
+        </div>
+
+        <!-- Search filters -->
+        <div class="search-filters" x-show="searchMode || searchResults.length" x-transition>
+          <div class="search-filter">
+            <label class="label-small">Duration</label>
+            <select x-model="searchFilters.duration" @change="onFilterChange()">
+              <option value="any">Any</option>
+              <option value="short">Short (&lt;4m)</option>
+              <option value="medium">Medium (4-20m)</option>
+              <option value="long">Long (&gt;20m)</option>
+            </select>
+          </div>
+          <div class="search-filter">
+            <label class="label-small">Sort by</label>
+            <select x-model="searchFilters.sort_by" @change="onFilterChange()">
+              <option value="relevance">Relevance</option>
+              <option value="date">Upload date</option>
+              <option value="views">View count</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Search results header -->
+        <div class="search-results-header" x-show="searchResults.length && searchState !== 'loading'" style="margin-top:1.5rem">
+          <span class="search-results-count"
+                x-text="searchResults.length + ' results for “' + downloadUrl.trim() + '”'"></span>
+          <button class="btn btn-ghost btn-small" @click="clearSearch()">Clear results</button>
+        </div>
+
+        <!-- Search skeletons (initial load) -->
+        <div class="video-grid" x-show="searchState === 'loading'" style="margin-top:0.75rem">
+          <template x-for="i in 6" :key="'search-skel-' + i">
+            <div class="skeleton-card">
+              <div class="skeleton-thumb"></div>
+              <div class="skeleton-info">
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Search empty state -->
+        <div class="empty-state empty-state-compact"
+             x-show="searchAttempted && !searchResults.length && searchState === 'idle'">
+          <span class="empty-icon">&#128269;</span>
+          <p class="empty-heading">No results</p>
+          <p class="empty-description">Try different keywords, or paste a YouTube URL directly.</p>
+        </div>
+
+        <!-- Search error state -->
+        <div class="empty-state empty-state-compact search-error"
+             x-show="searchState === 'error'">
+          <span class="empty-icon">&#9888;&#65039;</span>
+          <p class="empty-heading">Search failed</p>
+          <p class="empty-description" x-text="searchError"></p>
+          <button class="btn btn-ghost btn-small" @click="performSearch(1)">Retry</button>
+        </div>
+
+        <!-- Search results -->
+        <div class="video-grid" x-show="searchResults.length && searchState !== 'loading'" style="margin-top:0.75rem">
+          <template x-for="result in searchResults" :key="result.youtube_id">
+            <div class="card video-card search-result-card"
+                 :class="{'search-result-downloaded': result.already_downloaded, 'search-result-busy': result._downloading}"
+                 @click="downloadFromSearch(result)">
+              <div class="video-thumb">
+                <img :src="result.thumbnail_url || ''" :alt="result.title"
+                     x-show="result.thumbnail_url" loading="lazy"
+                     @error="$el.style.display='none'">
+                <div class="thumb-placeholder" x-show="!result.thumbnail_url">&#9654;</div>
+                <span class="duration-badge" x-show="result.duration"
+                      x-text="formatDuration(result.duration)"></span>
+                <span class="downloaded-badge" x-show="result.already_downloaded">In Library</span>
+                <span class="downloading-overlay" x-show="result._downloading">
+                  <span class="spinner" aria-hidden="true"></span> Downloading&hellip;
+                </span>
+              </div>
+              <div class="video-info">
+                <h3 x-text="result.title || 'Untitled'"></h3>
+                <div class="video-meta">
+                  <a class="search-uploader" x-show="result.uploader" x-text="result.uploader"
+                     href="#" @click.stop.prevent="searchChannel(result.uploader_id || result.uploader)"
+                     title="Show more videos from this channel"></a>
+                  <span class="badge badge-small" x-show="result.view_count"
+                        x-text="formatViewCount(result.view_count) + ' views'"></span>
+                  <span class="badge badge-small" x-show="result.upload_date"
+                        x-text="formatUploadDate(result.upload_date)"></span>
+                </div>
+                <p class="search-description" x-show="result.description"
+                   x-text="result.description"></p>
+                <span class="search-card-action"
+                      x-text="result.already_downloaded ? 'Open in library →' : 'Click to download'"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Load more -->
+        <div class="search-pager" x-show="searchResults.length && searchState !== 'loading'">
+          <button class="btn btn-ghost" x-show="searchHasMore"
+                  :disabled="searching"
+                  @click="loadMoreResults()">
+            <span x-show="searchState !== 'loadingMore'">Load more results</span>
+            <span x-show="searchState === 'loadingMore'" class="spinner" aria-hidden="true"></span>
+          </button>
+          <span class="search-pager-end" x-show="!searchHasMore && searchPage >= searchMaxPages">
+            End of results
+          </span>
+        </div>
+
+        <!-- Download progress -->
+        <div x-show="currentDownload" class="card" style="margin-top:1.5rem">
+          <div class="job-status">
+            <span class="badge" :class="'badge-' + (currentDownload?.status || 'queued')"
+                  x-text="currentDownload?.status"></span>
+            <div class="progress-bar" x-show="currentDownload?.status === 'running'">
+              <div class="progress-fill" :style="'width:' + (currentDownload?.progress || 0) + '%'"></div>
+            </div>
+            <p x-show="currentDownload?.status === 'completed'" class="success-text">
+              Download complete!
+              <a href="#" @click.prevent="viewVideo(currentDownload.video_id)">View video &rarr;</a>
+            </p>
+            <p x-show="currentDownload?.status === 'failed'" class="error-text"
+               x-text="'Error: ' + (currentDownload?.error || 'Unknown error')"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Video List -->
+    <div x-show="page === 'list'" x-transition>
+      <div class="page-section">
+        <div class="library-header">
+          <h2>Library</h2>
+          <button class="btn btn-ghost btn-small btn-prune" @click="showPruneModal = true"
+                  :disabled="pruning || !videos.length" title="Remove old unprotected videos">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+            <span x-show="!pruning">Prune</span>
+            <span x-show="pruning" class="spinner" aria-hidden="true"></span>
+          </button>
+        </div>
+
+        <!-- Empty state -->
+        <div x-show="videos.length === 0 && !loadingVideos" class="empty-state">
+          <span class="empty-icon">&#127916;</span>
+          <p class="empty-heading">No videos yet</p>
+          <p class="empty-description">Download a YouTube video to get started with clips, GIFs, and audio extraction.</p>
+          <button class="btn btn-primary" @click="navigate('download')">Download your first video</button>
+        </div>
+
+        <!-- Skeleton loading -->
+        <div class="video-grid" x-show="loadingVideos && !videos.length">
+          <template x-for="i in 6" :key="'skel-' + i">
+            <div class="skeleton-card">
+              <div class="skeleton-thumb"></div>
+              <div class="skeleton-info">
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Video grid -->
+        <div class="video-grid" x-show="videos.length">
+          <template x-for="video in displayedVideos" :key="video.id">
+            <div class="card video-card" @click="viewVideo(video.id)">
+              <div class="video-thumb">
+                <img :src="video.thumbnail_url || ''" :alt="video.title"
+                     x-show="video.thumbnail_url" loading="lazy"
+                     @error="$el.style.display='none'">
+                <div class="thumb-placeholder" x-show="!video.thumbnail_url">&#9654;</div>
+                <span class="duration-badge" x-show="video.duration"
+                      x-text="formatDuration(video.duration)"></span>
+                <span class="protected-heart-overlay" x-show="video.protected">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#f38ba8" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </span>
+              </div>
+              <div class="video-info">
+                <h3 x-text="video.title || 'Untitled'"></h3>
+                <div class="video-meta">
+                  <span class="badge badge-small badge-protected" x-show="video.protected">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    Protected
+                  </span>
+                  <span class="badge badge-small" x-show="video.language" x-text="video.language"></span>
+                  <span class="badge badge-small badge-subs" x-show="video.subtitles?.length"
+                        x-text="'CC: ' + video.subtitles?.length"></span>
+                  <span class="badge badge-small" :class="'badge-' + video.status" x-text="video.status"></span>
+                  <span class="badge badge-small" x-show="video.file_size"
+                        x-text="formatFileSize(video.file_size)"></span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+        <!-- Lazy load sentinel -->
+        <div id="load-more-sentinel" x-show="hasMoreVideos" class="load-more-sentinel">
+          <span class="spinner"></span>
+        </div>
+        <p class="library-count" x-show="videos.length > videosPerPage"
+           x-text="'Showing ' + Math.min(videosDisplayCount, videos.length) + ' of ' + videos.length + ' videos'"></p>
+      </div>
+    </div>
+
+    <!-- Video Detail -->
+    <div x-show="page === 'detail'" x-transition>
+      <div class="page-section" x-show="currentVideo">
+        <button class="btn btn-ghost back-btn" @click="navigateBack()">&larr; Back</button>
+
+        <div class="detail-layout">
+          <!-- Left column: Player + Info + Transcript -->
+          <div class="player-column">
+            <div class="player-crop-wrapper">
+              <video controls class="video-player" x-ref="videoPlayer"
+                     :src="currentVideo ? '/files/videos/' + currentVideo.id + '/source.mp4' : ''">
+              </video>
+              <div class="crop-overlay" x-show="cropEnabled" x-transition.opacity
+                   :style="'--crop-inset:' + ((100 - cropPct) / 2) + '%'"></div>
+            </div>
+
+            <!-- Video info -->
+            <div class="video-detail-info">
+              <div class="detail-info-header">
+                <h2 x-text="currentVideo?.title"></h2>
+                <div class="detail-header-actions">
+                  <button class="btn btn-ghost btn-small btn-icon-heart"
+                          :class="{'btn-heart-active': currentVideo?.protected}"
+                          @click="toggleProtected()"
+                          :aria-label="currentVideo?.protected ? 'Remove protection' : 'Protect video'"
+                          :title="currentVideo?.protected ? 'Remove protection' : 'Protect from auto-prune'">
+                    <svg width="16" height="16" viewBox="0 0 24 24"
+                         :fill="currentVideo?.protected ? '#f38ba8' : 'none'"
+                         :stroke="currentVideo?.protected ? '#f38ba8' : 'currentColor'"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                  </button>
+                  <button class="btn btn-ghost btn-small btn-icon-danger" @click="showDeleteModal = true"
+                          aria-label="Delete video" title="Delete video">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="video-meta detail-meta">
+                <span class="badge badge-small" x-text="formatDuration(currentVideo?.duration)"></span>
+                <span class="badge badge-small" x-show="currentVideo?.language" x-text="currentVideo?.language"></span>
+                <span class="badge badge-small badge-subs" x-show="subtitleTracks.length"
+                      x-text="'CC: ' + subtitleTracks.length"></span>
+                <span class="badge badge-small" x-show="currentVideo?.file_size"
+                      x-text="formatFileSize(currentVideo?.file_size)"></span>
+              </div>
+            </div>
+
+            <!-- Transcript section -->
+            <div class="transcript-section">
+              <div class="transcript-header">
+                <span class="transcript-label">Transcript</span>
+                <div class="transcript-actions">
+                  <select x-show="subtitleTracks.length > 1" x-model="transcriptLang"
+                          @change="loadTranscriptText()" class="transcript-lang-select">
+                    <template x-for="sub in subtitleTracks" :key="sub.language">
+                      <option :value="sub.language" x-text="sub.language"></option>
+                    </template>
+                  </select>
+                  <button class="btn btn-ghost btn-small" @click="copyTranscriptText()"
+                          x-show="transcriptText" title="Copy transcript">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy
+                  </button>
+                </div>
+              </div>
+              <div x-show="transcriptText" class="transcript-container">
+                <div class="transcript-body" :class="{'transcript-expanded': transcriptExpanded}">
+                  <p class="transcript-text" x-text="transcriptText"></p>
+                </div>
+                <div class="transcript-fade" x-show="!transcriptExpanded"></div>
+                <button class="btn btn-ghost btn-small transcript-toggle"
+                        @click="transcriptExpanded = !transcriptExpanded"
+                        x-text="transcriptExpanded ? 'Show less' : 'Show more'"></button>
+              </div>
+              <div x-show="transcriptLoading" class="transcript-loading">
+                <span class="spinner"></span> Loading transcript...
+              </div>
+              <p x-show="!transcriptText && !transcriptLoading && !subtitleTracks.length" class="hint">
+                No subtitles available.
+                <a href="#" @click.prevent="fetchSubtitles()">Fetch from YouTube</a>
+              </p>
+            </div>
+          </div>
+
+          <!-- Right column: Controls + Actions -->
+          <div class="controls-section">
+            <!-- Time range -->
+            <div class="form-group">
+              <label>Time Range</label>
+              <div class="time-inputs">
+                <div>
+                  <label class="label-small">Start</label>
+                  <div class="time-input-pair">
+                    <input type="text" x-model="clipStartDisplay"
+                           placeholder="0:00" class="font-mono">
+                    <button class="btn-set-time" @click="setStartFromPlayer()"
+                            aria-label="Set start time from player" title="Set start from player">
+                      <span class="btn-set-label">Set</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label class="label-small">End</label>
+                  <div class="time-input-pair">
+                    <input type="text" x-model="clipEndDisplay"
+                           placeholder="0:10" class="font-mono">
+                    <button class="btn-set-time" @click="setEndFromPlayer()"
+                            aria-label="Set end time from player" title="Set end from player">
+                      <span class="btn-set-label">Set</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Crop -->
+            <div class="form-group">
+              <label>Crop / Zoom</label>
+              <div class="crop-controls">
+                <label class="toggle">
+                  <input type="checkbox" x-model="cropEnabled" class="sr-only">
+                  <span class="toggle-track"></span>
+                  <span class="toggle-text">Crop to center</span>
+                  <span class="crop-value" x-show="cropEnabled" x-text="cropPct + '%'"></span>
+                </label>
+                <input type="range" x-model.number="cropPct" min="50" max="95" step="5"
+                       x-show="cropEnabled" class="range-slider" aria-label="Crop percentage"
+                       :style="'background: linear-gradient(90deg, #b07ee8 0%, #b07ee8 ' + ((cropPct - 50) / 45 * 100) + '%, #45475a ' + ((cropPct - 50) / 45 * 100) + '%, #45475a 100%)'">
+                <p class="hint" x-show="cropEnabled">Removes edges (logos, marquees). Forces precise mode for clips.</p>
+              </div>
+            </div>
+
+            <div class="action-cards-divider"></div>
+
+            <!-- Download buttons (quick access) -->
+            <div class="download-buttons">
+              <button class="btn btn-ghost download-btn" @click="downloadSource()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Original
+              </button>
+            </div>
+
+            <!-- Resolution downloads -->
+            <div class="resolution-section" x-show="redownloadHeights().length > 0">
+              <div class="resolution-grid">
+                <template x-for="h in redownloadHeights()" :key="h">
+                  <button class="btn btn-ghost resolution-btn"
+                          :class="{'resolution-btn-unavailable': !isHeightAvailable(h)}"
+                          @click="isHeightAvailable(h) && downloadResolution(h)"
+                          :disabled="resolutionBusy[h] || !isHeightAvailable(h)"
+                          :title="isHeightAvailable(h) ? resolutionLabel(h) : resolutionLabel(h) + ' (unavailable)'">
+                    <span x-show="!resolutionBusy[h]" x-text="resolutionLabel(h)"></span>
+                    <span x-show="resolutionBusy[h]" class="spinner" aria-hidden="true"></span>
+                  </button>
+                </template>
+              </div>
+            </div>
+            <div x-show="!availableHeights.length && currentVideo?.status === 'ready'" class="resolution-section">
+              <button class="btn btn-ghost btn-small" @click="probeHeights()" :disabled="probingHeights">
+                <span x-show="!probingHeights">Detect available resolutions</span>
+                <span x-show="probingHeights" class="spinner" aria-hidden="true"></span>
+              </button>
+              <p class="hint">Queries YouTube for available streams</p>
+            </div>
+
+            <!-- Action Cards Accordion -->
+            <div class="action-cards">
+
+              <!-- Clip -->
+              <div class="action-card" :class="{'action-card-active': activeAction === 'clip'}">
+                <button class="action-card-trigger" @click="toggleAction('clip')">
+                  <svg class="action-card-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                  <span class="action-card-info">
+                    <span class="action-card-name">Clip</span>
+                    <span class="action-card-desc">Lossless or frame-accurate MP4</span>
+                  </span>
+                  <svg class="action-card-chevron" :class="{'chevron-open': activeAction === 'clip'}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div x-show="activeAction === 'clip'" x-collapse>
+                  <div class="action-card-body">
+                    <select x-model="clipMode" :disabled="cropEnabled">
+                      <option value="copy">Lossless (copy)</option>
+                      <option value="precise">Frame-accurate (precise)</option>
+                    </select>
+                    <p class="hint" x-show="cropEnabled && clipMode === 'copy'">Mode forced to precise when crop is active</p>
+                    <button class="btn btn-primary action-card-submit" @click="generateClip()"
+                            :disabled="!clipStartDisplay || !clipEndDisplay">
+                      Generate Clip
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- GIF -->
+              <div class="action-card" :class="{'action-card-active': activeAction === 'gif'}">
+                <button class="action-card-trigger" @click="toggleAction('gif')">
+                  <svg class="action-card-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+                  <span class="action-card-info">
+                    <span class="action-card-name">GIF</span>
+                    <span class="action-card-desc">Animated GIF with palette optimization</span>
+                  </span>
+                  <svg class="action-card-chevron" :class="{'chevron-open': activeAction === 'gif'}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div x-show="activeAction === 'gif'" x-collapse>
+                  <div class="action-card-body">
+                    <select x-model="gifQuality">
+                      <option value="high">High quality (2-pass)</option>
+                      <option value="fast">Fast (1-pass)</option>
+                    </select>
+                    <div class="action-card-row">
+                      <div>
+                        <label class="label-small">Width (px)</label>
+                        <input type="number" x-model.number="gifWidth" min="100" max="1920"
+                               placeholder="480" class="font-mono action-card-input">
+                      </div>
+                      <div>
+                        <label class="label-small">FPS</label>
+                        <input type="number" x-model.number="gifFps" min="1" max="30"
+                               placeholder="10" class="font-mono action-card-input">
+                      </div>
+                    </div>
+                    <button class="btn btn-accent action-card-submit" @click="generateGif()"
+                            :disabled="!clipStartDisplay || !clipEndDisplay">
+                      Generate GIF
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Audio -->
+              <div class="action-card" :class="{'action-card-active': activeAction === 'audio'}">
+                <button class="action-card-trigger" @click="toggleAction('audio')">
+                  <svg class="action-card-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                  <span class="action-card-info">
+                    <span class="action-card-name">Audio</span>
+                    <span class="action-card-desc">Extract MP3 from video</span>
+                  </span>
+                  <svg class="action-card-chevron" :class="{'chevron-open': activeAction === 'audio'}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div x-show="activeAction === 'audio'" x-collapse>
+                  <div class="action-card-body">
+                    <label class="toggle">
+                      <input type="checkbox" x-model="audioFullVideo" class="sr-only">
+                      <span class="toggle-track"></span>
+                      <span class="toggle-text">Full length</span>
+                    </label>
+                    <p class="hint" x-show="!audioFullVideo">Uses the time range above</p>
+                    <button class="btn btn-primary action-card-submit" @click="generateAudio()" :disabled="extractingAudio">
+                      <span x-show="!extractingAudio">Extract MP3</span>
+                      <span x-show="extractingAudio" class="spinner" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Downloads trigger -->
+            <button class="derivatives-trigger" @click="derivativesPanelOpen = true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Downloads
+              <span class="derivatives-badge" x-show="derivatives.length || activeJobs.length"
+                    x-text="derivatives.length + activeJobs.length"></span>
+              <span class="spinner" x-show="activeJobs.length" aria-hidden="true" style="margin-left:0.25rem"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Derivatives panel overlay -->
+        <div class="derivatives-panel-overlay" x-show="derivativesPanelOpen" x-transition.opacity
+             @click="derivativesPanelOpen = false" style="display:none"></div>
+
+        <!-- Downloads slide-in panel -->
+        <aside class="derivatives-panel" :class="{'derivatives-panel-open': derivativesPanelOpen}">
+          <div class="derivatives-panel-header">
+            <h3>Downloads</h3>
+            <button class="btn btn-ghost panel-close-btn" @click="derivativesPanelOpen = false" aria-label="Close">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="derivatives-panel-body">
+            <!-- Active jobs (pending/running) -->
+            <div class="derivatives-list" x-show="activeJobs.length">
+              <template x-for="j in activeJobs" :key="j.id">
+                <div class="derivative-item derivative-item-pending">
+                  <span class="badge badge-small" :class="'badge-' + (j.status || 'queued')" x-text="j.type"></span>
+                  <span class="derivative-params" x-text="formatParams(j.params)"></span>
+                  <span class="derivative-status">
+                    <span class="spinner" aria-hidden="true"></span>
+                    <span x-text="(j.status || 'queued') + (j.progress ? ' ' + j.progress + '%' : '')"></span>
+                  </span>
+                </div>
+              </template>
+            </div>
+            <!-- Completed derivatives -->
+            <div class="derivatives-list" x-show="derivatives.length">
+              <template x-for="d in derivatives" :key="d.job_id">
+                <div class="derivative-item" x-show="d.result_url">
+                  <span class="badge badge-small" x-text="d.type"></span>
+                  <span class="derivative-params" x-text="formatParams(d.params)"></span>
+                  <span class="derivative-size" x-show="d.file_size" x-text="formatFileSize(d.file_size)"></span>
+                  <a :href="derivativeDownloadUrl(d.job_id)" class="derivative-dl-icon" title="Download" @click.stop>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </a>
+                  <button class="btn btn-ghost btn-small btn-icon-danger derivative-delete-btn"
+                          @click.stop="promptDeleteDerivative(d)" title="Delete">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                </div>
+              </template>
+            </div>
+            <div x-show="!derivatives.length && !activeJobs.length" class="derivatives-empty">
+              <p class="hint">No downloads yet. Generate a clip, GIF, or audio to see results here.</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>
