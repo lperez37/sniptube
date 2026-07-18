@@ -3,10 +3,18 @@
 Self-hosted YouTube clip and GIF generator. Download a video once with yt-dlp, then create lossless MP4 clips, high-quality GIFs, and MP3 extracts on demand via HTTP API, MCP tools, or a built-in web UI. Installable as a PWA for a native app experience.
 
 ![Search](docs/screenshots/search.png)
-*Live search-as-you-type with duration/sort filters, in-place downloads, and library cross-referencing.*
+*Live search-as-you-type: filters, in-place downloads with a background-downloads indicator, bulk selection with "Download all", and library cross-referencing.*
 
-![Video detail](docs/screenshots/detail.png)
-*Per-video workspace: player, transcript, clip/GIF/audio generation, resolution downloads.*
+<table>
+  <tr>
+    <td width="62%"><img src="docs/screenshots/detail.png" alt="Video detail page"></td>
+    <td width="38%"><img src="docs/screenshots/mobile.png" alt="Mobile UI with bottom tab bar"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Per-video workspace: player, transcript, clip/GIF/audio, resolution downloads</em></td>
+    <td align="center"><em>Mobile PWA: bottom tab bar, bulk download bar, share target</em></td>
+  </tr>
+</table>
 
 ## Quick Start
 

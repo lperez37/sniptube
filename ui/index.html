@@ -183,6 +183,25 @@
           </div>
         </div>
 
+        <!-- Library matches: instant local hits for the current query, shown
+             even while the YouTube search is still loading -->
+        <div class="library-matches" x-show="libraryMatches.length" style="display:none">
+          <div class="library-matches-title">In your library</div>
+          <div class="library-matches-list">
+            <template x-for="v in libraryMatches" :key="'lib-' + v.id">
+              <button class="library-match" type="button" @click="viewVideo(v.id)">
+                <span class="library-match-thumb">
+                  <img :src="v.thumbnail_url || ''" alt="" loading="lazy"
+                       x-show="v.thumbnail_url" @error="$el.style.display='none'">
+                </span>
+                <span class="library-match-title" x-text="v.title || 'Untitled'"></span>
+                <span class="library-match-duration" x-text="formatDuration(v.duration)"></span>
+                <span class="library-match-arrow" aria-hidden="true">&rarr;</span>
+              </button>
+            </template>
+          </div>
+        </div>
+
         <!-- Search results header -->
         <div class="search-results-header" x-show="searchResults.length && searchState !== 'loading'" style="margin-top:1.5rem">
           <span class="search-results-count"

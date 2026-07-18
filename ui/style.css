@@ -971,6 +971,74 @@ a.derivative-item:hover {
   justify-content: space-between;
   gap: var(--space-2);
 }
+/* Library matches - local hits for the current search query */
+.library-matches {
+  margin-top: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.library-matches-title {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.library-match {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.library-match:last-child {
+  border-bottom: none;
+}
+.library-match:hover,
+.library-match:focus-visible {
+  background: var(--bg-hover);
+}
+.library-match-thumb {
+  flex: 0 0 64px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+.library-match-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.library-match-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library-match-duration {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.library-match-arrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
 .search-pager {
   display: flex;
   align-items: center;

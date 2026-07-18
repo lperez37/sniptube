@@ -37,6 +37,21 @@ function app() {
       return this.searchState === 'loading' || this.searchState === 'loadingMore';
     },
 
+    // Instant local results: while searching YouTube, also match the query
+    // against the library so already-downloaded videos are one tap away.
+    get libraryMatches() {
+      if (!this.searchMode) return [];
+      const q = this.downloadUrl.trim().toLowerCase();
+      if (q.length < 2) return [];
+      const terms = q.split(/\s+/).filter(Boolean);
+      return this.videos
+        .filter((v) => {
+          const title = (v.title || '').toLowerCase();
+          return v.status === 'ready' && terms.every((t) => title.includes(t));
+        })
+        .slice(0, 6);
+    },
+
     // Background downloads: jobId -> {video_id, label, progress, status}.
     // Shown in the header indicator; survives navigation and page reloads
     // (rehydrated from GET /jobs/active on init).
@@ -196,6 +211,9 @@ function app() {
       } else if (hash.startsWith('#/download')) {
         this._clearPolling();
         this.page = 'download';
+        // Library matches need the video list; it's empty when the session
+        // started on a video deep link (init skips loadVideos on that path).
+        if (!this.videos.length) this.loadVideos({ background: true });
         this._restoreSearchFromHash(hash);
       } else {
         this._clearPolling();
