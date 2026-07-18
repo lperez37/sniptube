@@ -124,15 +124,21 @@ function app() {
 
     // --- Background download tracking ---
     _trackDownload(jobId, videoId, label, onUpdate = null) {
+      // The backend dedupes: re-submitting a downloading video returns the
+      // existing job id. Never start a second poll chain for the same job -
+      // it would double the requests, toasts, and library refetches.
+      if (this.activeDownloads[jobId]) return;
       this.activeDownloads = {
         ...this.activeDownloads,
         [jobId]: { video_id: videoId, label, progress: 0, status: 'queued' },
       };
       this.pollJob(jobId, (job) => {
-        if (this.activeDownloads[jobId]) {
+        const tracked = this.activeDownloads[jobId];
+        // Skip the reactive write (re-renders the header menu) when nothing changed.
+        if (tracked && (tracked.progress !== (job.progress ?? 0) || tracked.status !== job.status)) {
           this.activeDownloads = {
             ...this.activeDownloads,
-            [jobId]: { ...this.activeDownloads[jobId], progress: job.progress ?? 0, status: job.status },
+            [jobId]: { ...tracked, progress: job.progress ?? 0, status: job.status },
           };
         }
         if (job.status === 'completed' || job.status === 'failed') {
@@ -264,18 +270,31 @@ function app() {
     },
 
     // --- Videos ---
-    async loadVideos() {
-      this.loadingVideos = true;
+    async loadVideos({ background = false } = {}) {
+      // background: refresh data in place - no skeleton flash, and keep the
+      // user's infinite-scroll position instead of collapsing to page one.
+      if (!background) this.loadingVideos = true;
       try {
         const res = await fetch(`${API}/videos`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         this.videos = await res.json();
-        this.videosDisplayCount = this.videosPerPage;
+        if (!background) this.videosDisplayCount = this.videosPerPage;
       } catch (e) {
-        this.toast('Failed to load videos', 'error');
+        if (!background) this.toast('Failed to load videos', 'error');
       }
       this.loadingVideos = false;
       this.$nextTick(() => this._setupLoadMore());
+    },
+
+    _videosRefreshTimer: null,
+    refreshVideosSoon() {
+      // Coalesce bursts of download completions (bulk queues) into a single
+      // library refetch instead of one GET /videos per finished job.
+      clearTimeout(this._videosRefreshTimer);
+      this._videosRefreshTimer = setTimeout(() => {
+        this._videosRefreshTimer = null;
+        this.loadVideos({ background: true });
+      }, 1500);
     },
 
     get displayedVideos() {
