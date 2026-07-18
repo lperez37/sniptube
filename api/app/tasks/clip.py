@@ -60,13 +60,17 @@ async def create_clip(ctx: dict, job_id: str, video_id: str,
         logger.info("Clip cache hit: %s", result_path)
         return
 
+    # Render to a temp file and atomically move into place, so a killed or
+    # concurrent duplicate job can never leave a truncated file at the cache path.
+    tmp_output = derivatives_dir / f"{params_hash}.{job_id}.tmp.mp4"
     try:
         await update_job(job_id, progress=30)
 
         if mode == "precise":
-            await make_clip_precise(source, output, start_sec, end_sec, crop_pct=crop_pct)
+            await make_clip_precise(source, tmp_output, start_sec, end_sec, crop_pct=crop_pct)
         else:
-            await make_clip_copy(source, output, start_sec, end_sec)
+            await make_clip_copy(source, tmp_output, start_sec, end_sec)
+        tmp_output.replace(output)
 
         result_path = f"videos/{video_id}/derivatives/clip/{params_hash}.mp4"
         await update_job(job_id, status="completed", progress=100, result_path=result_path)
@@ -75,10 +79,10 @@ async def create_clip(ctx: dict, job_id: str, video_id: str,
     except asyncio.CancelledError:
         # arq job_timeout / worker shutdown - mark failed so clients stop polling.
         logger.warning("Clip cancelled/timed out for %s", video_id)
-        output.unlink(missing_ok=True)
+        tmp_output.unlink(missing_ok=True)
         await update_job(job_id, status="failed", error="Job cancelled or timed out")
         raise
     except Exception as e:
         logger.error("Clip failed for %s: %s", video_id, e)
-        output.unlink(missing_ok=True)
+        tmp_output.unlink(missing_ok=True)
         await update_job(job_id, status="failed", error=str(e)[:500])

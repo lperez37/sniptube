@@ -2,6 +2,7 @@ import logging
 
 from arq import cron
 from arq.connections import RedisSettings
+from arq.worker import func
 
 from app.config import settings
 from app.tasks.audio import extract_audio_task
@@ -35,9 +36,17 @@ async def _startup(ctx: dict) -> None:
 
 
 class WorkerSettings:
-    functions = [download_video, create_clip, create_gif, extract_audio_task, redownload_video]
+    functions = [
+        # Downloads of long/high-res videos can legitimately exceed the default
+        # timeout - give them 30 minutes instead of failing at 10.
+        func(download_video, timeout=1800),
+        func(redownload_video, timeout=1800),
+        create_clip,
+        create_gif,
+        extract_audio_task,
+    ]
     cron_jobs = [cron(trim_old_videos, hour=3, minute=0)]
     on_startup = _startup
     redis_settings = parse_redis_url(settings.redis_url)
     max_jobs = settings.worker_concurrency
-    job_timeout = 600  # 10 minutes max per job
+    job_timeout = 600  # 10 minutes max per ffmpeg job (downloads override above)

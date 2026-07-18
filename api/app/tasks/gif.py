@@ -57,13 +57,17 @@ async def create_gif(ctx: dict, job_id: str, video_id: str,
         logger.info("GIF cache hit: %s", result_path)
         return
 
+    # Render to a temp file and atomically move into place, so a killed or
+    # concurrent duplicate job can never leave a truncated file at the cache path.
+    tmp_output = derivatives_dir / f"{params_hash}.{job_id}.tmp.gif"
     try:
         await update_job(job_id, progress=30)
 
         if quality == "high":
-            await make_gif_high(source, output, start_sec, end_sec, width=width, fps=fps, crop_pct=crop_pct)
+            await make_gif_high(source, tmp_output, start_sec, end_sec, width=width, fps=fps, crop_pct=crop_pct)
         else:
-            await make_gif_fast(source, output, start_sec, end_sec, width=width, fps=fps, crop_pct=crop_pct)
+            await make_gif_fast(source, tmp_output, start_sec, end_sec, width=width, fps=fps, crop_pct=crop_pct)
+        tmp_output.replace(output)
 
         result_path = f"videos/{video_id}/derivatives/gif/{params_hash}.gif"
         await update_job(job_id, status="completed", progress=100, result_path=result_path)
@@ -72,10 +76,10 @@ async def create_gif(ctx: dict, job_id: str, video_id: str,
     except asyncio.CancelledError:
         # arq job_timeout / worker shutdown - mark failed so clients stop polling.
         logger.warning("GIF cancelled/timed out for %s", video_id)
-        output.unlink(missing_ok=True)
+        tmp_output.unlink(missing_ok=True)
         await update_job(job_id, status="failed", error="Job cancelled or timed out")
         raise
     except Exception as e:
         logger.error("GIF failed for %s: %s", video_id, e)
-        output.unlink(missing_ok=True)
+        tmp_output.unlink(missing_ok=True)
         await update_job(job_id, status="failed", error=str(e)[:500])

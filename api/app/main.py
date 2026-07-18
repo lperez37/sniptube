@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -67,6 +68,24 @@ Generated files are served at `/files/videos/{video_id}/...`. The `result_url` i
         },
     ],
 )
+
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+# Derivative files are content-addressed by params hash and never change, so
+# browsers may cache them forever - repeat clip/GIF previews cost zero requests.
+@app.middleware("http")
+async def derivative_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if (
+        path.startswith("/files/videos/")
+        and "/derivatives/" in path
+        and response.status_code in (200, 206)
+    ):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
 
 # The bundled UI is served same-origin, so CORS is off by default. Set
 # CORS_ORIGINS (comma-separated) only if a browser app on another origin

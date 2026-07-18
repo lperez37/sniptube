@@ -220,11 +220,13 @@ async def update_job(job_id: str, **kwargs) -> dict | None:
         await db.close()
 
 
-async def fail_stale_jobs(running_max_minutes: int = 30, queued_max_hours: int = 24) -> int:
+async def fail_stale_jobs(running_max_minutes: int = 45, queued_max_hours: int = 24) -> int:
     """Mark orphaned jobs as failed.
 
-    A 'running' job not updated within running_max_minutes is dead (the worker's
-    job_timeout would have fired long before). A 'queued' job older than
+    A 'running' job not updated within running_max_minutes is dead - the
+    threshold sits above the longest task timeout (downloads: 30 min), so a
+    live download that reports no progress mid-transfer is never false-failed.
+    A 'queued' job older than
     queued_max_hours was lost across restarts - the threshold is generous so a
     long legitimate bulk-download queue is never false-failed.
     Returns the number of jobs swept. Called on API and worker startup.

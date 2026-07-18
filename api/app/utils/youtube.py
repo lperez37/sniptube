@@ -15,6 +15,12 @@ def youtube_ydl_opts(**overrides: Any) -> dict[str, Any]:
         "quiet": True,
         "no_warnings": True,
         "extractor_args": YOUTUBE_EXTRACTOR_ARGS,
+        # A watch URL carrying a list= param must download one video, not the
+        # whole playlist (each entry would overwrite source.%(ext)s in turn).
+        "noplaylist": True,
+        # DASH/HLS fragments download over one connection by default;
+        # parallel fragments typically speed downloads up 2-4x.
+        "concurrent_fragments": 4,
     }
     opts.update(overrides)
     return opts

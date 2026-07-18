@@ -55,9 +55,13 @@ async def extract_audio_task(ctx: dict, job_id: str, video_id: str,
         logger.info("Audio cache hit: %s", result_path)
         return
 
+    # Render to a temp file and atomically move into place, so a killed or
+    # concurrent duplicate job can never leave a truncated file at the cache path.
+    tmp_output = derivatives_dir / f"{params_hash}.{job_id}.tmp.mp3"
     try:
         await update_job(job_id, progress=30)
-        await extract_audio(source, output, start_sec, end_sec)
+        await extract_audio(source, tmp_output, start_sec, end_sec)
+        tmp_output.replace(output)
 
         result_path = f"videos/{video_id}/derivatives/audio/{params_hash}.mp3"
         await update_job(job_id, status="completed", progress=100, result_path=result_path)
@@ -66,10 +70,10 @@ async def extract_audio_task(ctx: dict, job_id: str, video_id: str,
     except asyncio.CancelledError:
         # arq job_timeout / worker shutdown - mark failed so clients stop polling.
         logger.warning("Audio extraction cancelled/timed out for %s", video_id)
-        output.unlink(missing_ok=True)
+        tmp_output.unlink(missing_ok=True)
         await update_job(job_id, status="failed", error="Job cancelled or timed out")
         raise
     except Exception as e:
         logger.error("Audio extraction failed for %s: %s", video_id, e)
-        output.unlink(missing_ok=True)
+        tmp_output.unlink(missing_ok=True)
         await update_job(job_id, status="failed", error=str(e)[:500])
