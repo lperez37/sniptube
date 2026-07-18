@@ -31,7 +31,7 @@ async def create_clip_endpoint(video_id: str, body: ClipRequest):
 
     **Modes:**
     - `copy` — Lossless stream copy. Instant, but cuts on nearest keyframe (±1-2s imprecision). Best for quick extracts.
-    - `precise` — Frame-accurate re-encode with CRF 0 (visually lossless). Slower but exact timing. Required when using crop.
+    - `precise` — Frame-accurate re-encode with CRF 18 (visually lossless). Slower but exact timing. Required when using crop.
 
     **Crop:** Set `crop_pct` (10-100) to crop to the center N% of the frame. This automatically forces `precise` mode.
 
