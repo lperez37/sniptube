@@ -163,7 +163,7 @@ function app() {
           this._trackDownload(job.id, job.video_id, label, (j) => {
             if (j.status === 'completed') {
               this.toast('Download complete!', 'success');
-              this.loadVideos();
+              this.refreshVideosSoon();
             } else if (j.status === 'failed') {
               this.toast('Download failed: ' + (j.error || ''), 'error');
             }
@@ -418,7 +418,7 @@ function app() {
             this.downloading = false;
             if (job.status === 'completed') {
               this.toast('Download complete!', 'success');
-              this.loadVideos();
+              this.refreshVideosSoon();
             } else {
               this.toast('Download failed: ' + (job.error || ''), 'error');
             }
@@ -575,7 +575,7 @@ function app() {
             result.already_downloaded = true;
             result.video_id = data.video_id;
             this.toast('Download complete!', 'success');
-            this.loadVideos();
+            this.refreshVideosSoon();
           } else if (job.status === 'failed') {
             result._downloading = false;
             this.toast('Download failed: ' + (job.error || ''), 'error');
@@ -1100,6 +1100,8 @@ function app() {
     // Generation checks run after every await, so even a poll whose fetch
     // was in flight during navigation stops instead of resurrecting itself.
     POLL_INTERVAL_MS: 1500,
+    POLL_INTERVAL_QUEUED_MS: 4000,   // waiting behind the 2-worker limit
+    POLL_INTERVAL_HIDDEN_MS: 8000,   // tab in background
     POLL_MAX_FAILURES: 20,
 
     pollJob(jobId, callback, opts = {}) {
@@ -1107,6 +1109,16 @@ function app() {
       const gen = this._pollGeneration;
       const stale = () => scope === 'page' && gen !== this._pollGeneration;
       let failures = 0;
+      let lastStatus = null;
+
+      // Queued jobs and hidden tabs don't need 1.5s granularity; failures
+      // back off linearly so a down server isn't hammered for the full 20 tries.
+      const nextDelay = () => {
+        let d = lastStatus === 'running' ? this.POLL_INTERVAL_MS : this.POLL_INTERVAL_QUEUED_MS;
+        if (document.hidden) d = Math.max(d, this.POLL_INTERVAL_HIDDEN_MS);
+        if (failures > 0) d = Math.min(d * (failures + 1), 15000);
+        return d;
+      };
 
       const poll = async () => {
         if (stale()) return;
@@ -1117,6 +1129,7 @@ function app() {
             failures = 0;
             const job = await res.json();
             if (stale()) return;
+            lastStatus = job.status;
             callback(job);
             if (job.status === 'completed' || job.status === 'failed') return;
           } else if (res.status === 404) {
@@ -1133,7 +1146,7 @@ function app() {
             return;
           }
         }
-        setTimeout(poll, this.POLL_INTERVAL_MS);
+        setTimeout(poll, nextDelay());
       };
       poll();
     },
@@ -1158,8 +1171,10 @@ function app() {
       str = (str || '').trim();
       if (!str) return 0;
       if (!str.includes(':')) return parseFloat(str) || 0;
-      const [minPart, secPart] = str.split(':');
-      return (parseInt(minPart, 10) || 0) * 60 + (parseFloat(secPart) || 0);
+      // Supports m:ss and h:mm:ss - fold left so 1:02:30 = 3750, not 62.
+      return str.split(':').reduce(
+        (total, part) => total * 60 + (parseFloat(part) || 0), 0
+      );
     },
 
     getClipStartSecs() { return this.mmssToSecs(this.clipStartDisplay); },

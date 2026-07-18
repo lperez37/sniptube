@@ -48,18 +48,24 @@ self.addEventListener('fetch', (e) => {
       && API_PREFIXES.some((p) => url.pathname.startsWith(p))) return;
 
   // Network-first for navigations and the app shell so a deploy is picked up
-  // on the first load instead of serving a stale HTML/JS mix.
+  // on the first load instead of serving a stale HTML/JS mix. A slow-but-alive
+  // connection never rejects, so race a 3s timeout that falls back to the
+  // cached shell - a warm PWA must not white-screen waiting on the network.
   const isShell = url.origin === self.location.origin
     && (e.request.mode === 'navigate' || APP_SHELL.includes(url.pathname));
   if (isShell) {
+    const network = fetch(e.request).then((res) => {
+      if (res.ok) {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
+      }
+      return res;
+    });
+    const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 3000));
     e.respondWith(
-      fetch(e.request).then((res) => {
-        if (res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
-        }
-        return res;
-      }).catch(() => caches.match(e.request))
+      Promise.race([network.catch(() => null), timeout]).then((res) =>
+        res || caches.match(e.request).then((cached) => cached || network)
+      )
     );
     return;
   }

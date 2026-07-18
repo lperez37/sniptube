@@ -164,7 +164,7 @@ curl -X POST http://localhost:8030/videos/{videoId}/clips \
 |-------------|--------|----------|-------------|
 | `start_sec` | float  | required | Start time in seconds |
 | `end_sec`   | float  | required | End time in seconds |
-| `mode`      | string | `"copy"` | `"copy"` = lossless stream copy (instant, keyframe-aligned ~0.5s). `"precise"` = frame-accurate re-encode with `-crf 0` (slower, visually lossless). |
+| `mode`      | string | `"copy"` | `"copy"` = lossless stream copy (instant, keyframe-aligned ~0.5s). `"precise"` = frame-accurate re-encode with `-crf 18` (slower, visually lossless). |
 | `crop_pct`  | int    | `null`   | Crop to center N% of frame (10-100). Forces precise mode. |
 
 ### Create a GIF
@@ -342,11 +342,11 @@ Open **http://localhost:8030** in a browser. Responsive dark interface (Inter + 
 | Mode | ffmpeg | Speed | Accuracy |
 |------|--------|-------|----------|
 | `copy` | `-c copy` (stream copy) | Instant | Keyframe-aligned (~0.5s tolerance) |
-| `precise` | `-c:v libx264 -crf 0 -c:a copy` | Slower | Frame-accurate, visually lossless |
+| `precise` | `-c:v libx264 -crf 18 -c:a copy` | Slower | Frame-accurate, visually lossless |
 
 **`copy`** is the default. It copies the video and audio streams without re-encoding — zero quality loss and near-instant. The only trade-off is that cut points snap to the nearest keyframe.
 
-**`precise`** re-encodes the video at boundaries with CRF 0 (mathematically lossless) for frame-accurate cuts. Audio is always copied without re-encoding.
+**`precise`** re-encodes the video with CRF 18 (visually lossless, universally playable yuv420p) for frame-accurate cuts, using fast input seeking so only the clipped range is decoded. Audio is always copied without re-encoding.
 
 ## GIF Quality Explained
 
