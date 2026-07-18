@@ -61,8 +61,13 @@ async def download_video(ctx: dict, job_id: str, video_id: str, url: str) -> Non
 
         await update_job(job_id, progress=20)
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+        # yt-dlp is synchronous - run it in a thread so the other worker slot
+        # (max_jobs=2) keeps making progress instead of blocking the event loop.
+        def _download() -> dict:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=True)
+
+        info = await asyncio.to_thread(_download)
 
         await update_job(job_id, progress=70)
 
@@ -84,7 +89,7 @@ async def download_video(ctx: dict, job_id: str, video_id: str, url: str) -> Non
             "language": info.get("language"),
             "uploader": info.get("uploader"),
             "upload_date": info.get("upload_date"),
-            "description": info.get("description", "")[:500],
+            "description": (info.get("description") or "")[:500],
             "thumbnail": info.get("thumbnail"),
             "available_heights": available_heights,
             "source_height": info.get("height"),
@@ -102,7 +107,7 @@ async def download_video(ctx: dict, job_id: str, video_id: str, url: str) -> Non
             if original_lang != "en":
                 wanted_langs.append("en")
 
-            subtitle_langs = fetch_subtitles(youtube_id, subs_dir, wanted_langs)
+            subtitle_langs = await asyncio.to_thread(fetch_subtitles, youtube_id, subs_dir, wanted_langs)
             logger.info("Subtitles fetched for %s: %s", video_id, subtitle_langs)
         except Exception as sub_err:
             logger.warning("Subtitle fetch failed for %s (non-fatal): %s", video_id, sub_err)

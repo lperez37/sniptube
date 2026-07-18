@@ -1181,8 +1181,82 @@ a.derivative-item:hover {
     top: auto;
     left: var(--space-3);
     right: var(--space-3);
-    bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--tab-bar-clearance, 0px) + var(--space-3) + env(safe-area-inset-bottom, 0px));
   }
+}
+
+/* Mobile bottom tab bar (hidden on desktop) */
+:root {
+  --tab-bar-clearance: 0px;
+}
+.tab-bar {
+  display: none;
+}
+@media (max-width: 768px) {
+  :root {
+    --tab-bar-clearance: 60px;
+  }
+  .tab-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    z-index: 50;
+    background: rgba(17, 17, 27, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .tab-bar-item {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 0.55rem 0 0.5rem;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tab-bar-item.active {
+    color: var(--accent, #b07ee8);
+  }
+  .tab-bar-badge {
+    position: absolute;
+    top: 4px;
+    right: calc(50% - 22px);
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--accent, #b07ee8);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+  }
+  /* Keep page content, bulk bar, and header dropdown clear of the tab bar */
+  main {
+    padding-bottom: calc(var(--tab-bar-clearance) + env(safe-area-inset-bottom, 0px) + var(--space-4));
+  }
+  .bulk-bar {
+    bottom: calc(var(--tab-bar-clearance) + var(--space-3) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* No white rubber-band flash: paint the page background on the root and
+   disable overscroll chaining/bounce beyond the document. */
+html {
+  background: #11111b;
+  overscroll-behavior-y: none;
 }
 
 .search-result-downloaded {

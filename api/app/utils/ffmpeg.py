@@ -11,6 +11,7 @@ async def run_ffmpeg(args: list[str]) -> None:
     logger.info("Running: %s", " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
+        stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -46,22 +47,29 @@ async def make_clip_copy(source: Path, output: Path, start_sec: float, end_sec: 
 
 async def make_clip_precise(source: Path, output: Path, start_sec: float, end_sec: float,
                             crop_pct: int | None = None) -> None:
-    """Frame-accurate clip with visually lossless re-encode at boundaries."""
+    """Frame-accurate clip with visually lossless re-encode at boundaries.
+
+    Input seeking (-ss before -i) is frame-accurate when re-encoding and avoids
+    decoding the file from t=0. CRF 18 + yuv420p keeps the output visually
+    lossless while staying playable in browsers (CRF 0 emits High 4:4:4, which
+    most players cannot decode) and an order of magnitude smaller.
+    """
     vf_parts = []
     if crop_pct is not None:
         vf_parts.append(_crop_filter(crop_pct))
 
     args = [
-        "-i", str(source),
         "-ss", str(start_sec),
-        "-to", str(end_sec),
+        "-i", str(source),
+        "-t", str(end_sec - start_sec),
     ]
     if vf_parts:
         args += ["-vf", ",".join(vf_parts)]
     args += [
         "-c:v", "libx264",
-        "-crf", "0",
-        "-preset", "fast",
+        "-crf", "18",
+        "-preset", "veryfast",
+        "-pix_fmt", "yuv420p",
         "-c:a", "copy",
         "-movflags", "+faststart",
         str(output),

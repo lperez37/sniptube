@@ -87,6 +87,25 @@ app.include_router(videos.router, prefix="/videos", tags=["videos"])
 app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 app.include_router(clips.router, tags=["clips"])
 
+@app.get("/share-target", include_in_schema=False)
+async def share_target(title: str = "", text: str = "", url: str = ""):
+    """Web Share Target: receives shares from Android (e.g. the YouTube app).
+
+    The YouTube app puts the video URL in `text`; other apps may use `url`.
+    Extract the first http(s) URL and hand it to the SPA via the hash, which
+    auto-downloads YouTube links and searches anything else.
+    """
+    import re as _re
+    from urllib.parse import quote
+
+    from fastapi.responses import RedirectResponse
+
+    candidates = f"{url} {text} {title}"
+    match = _re.search(r"https?://\S+", candidates)
+    shared = match.group(0) if match else (text or title).strip()
+    return RedirectResponse(f"/#/download?share={quote(shared)}", status_code=303)
+
+
 # Serve generated files. Mount only the videos subtree - the SQLite database
 # also lives in data_dir and must never be reachable over HTTP.
 app.mount(

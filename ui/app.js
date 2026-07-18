@@ -203,6 +203,23 @@ function app() {
       const qs = hash.split('?')[1];
       if (!qs) return;
       const p = new URLSearchParams(qs);
+
+      // Web Share Target (see /share-target): a shared YouTube link starts
+      // downloading immediately; any other shared text becomes a search.
+      const shared = (p.get('share') || '').trim();
+      if (shared) {
+        history.replaceState(null, '', '#/download'); // don't re-trigger on reload
+        this.downloadUrl = shared;
+        if (this.isSearchQuery(shared)) {
+          this.searchMode = true;
+          this.performSearch(1);
+        } else {
+          this.searchMode = false;
+          this.submitDownload();
+        }
+        return;
+      }
+
       const q = (p.get('q') || '').trim();
       if (!q) return;
       const duration = p.get('duration') || 'any';

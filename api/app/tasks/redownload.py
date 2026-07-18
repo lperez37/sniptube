@@ -47,8 +47,13 @@ async def redownload_video(ctx: dict, job_id: str, video_id: str, height: int) -
             outtmpl=str(output),
         )
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        # yt-dlp is synchronous - run it in a thread so the other worker slot
+        # (max_jobs=2) keeps making progress instead of blocking the event loop.
+        def _download() -> None:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+
+        await asyncio.to_thread(_download)
 
         await update_job(job_id, progress=90)
 

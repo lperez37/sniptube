@@ -280,7 +280,9 @@ async def fetch_subtitles_endpoint(video_id: str):
         wanted.append("en")
 
     try:
-        saved = fetch_subtitles(youtube_id, subs_dir, wanted)
+        # fetch_subtitles does sequential network I/O (transcript API + yt-dlp
+        # fallback) - run in a thread so the event loop keeps serving requests.
+        saved = await asyncio.to_thread(fetch_subtitles, youtube_id, subs_dir, wanted)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Subtitle fetch failed: {e}")
 
@@ -354,9 +356,14 @@ async def probe_resolutions(video_id: str):
     if not url:
         raise HTTPException(status_code=400, detail="Missing URL in video record")
 
-    try:
+    def _probe() -> dict:
         with yt_dlp.YoutubeDL(youtube_ydl_opts()) as ydl:
-            info = ydl.extract_info(url, download=False)
+            return ydl.extract_info(url, download=False)
+
+    try:
+        # Multi-second network call - run in a thread so the event loop
+        # keeps serving requests (same pattern as routers/search.py).
+        info = await asyncio.to_thread(_probe)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"yt-dlp probe failed: {e}")
 

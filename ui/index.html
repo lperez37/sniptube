@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Sniptube</title>
   <meta name="description" content="Self-hosted YouTube clip and GIF generator">
-  <meta name="theme-color" content="#b07ee8">
+  <!-- Matches the page background so browser chrome / status bar blends in -->
+  <meta name="theme-color" content="#11111b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Sniptube">
@@ -709,6 +710,21 @@
     </div>
 
   </main>
+
+  <!-- Mobile bottom tab bar -->
+  <nav class="tab-bar" aria-label="Primary">
+    <button class="tab-bar-item" :class="{'active': page === 'list' || page === 'detail'}"
+            @click="navigate('list')" type="button">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Library</span>
+    </button>
+    <button class="tab-bar-item" :class="{'active': page === 'download'}"
+            @click="navigate('download')" type="button">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Search</span>
+      <span class="tab-bar-badge" x-show="activeDownloadCount" x-text="activeDownloadCount"></span>
+    </button>
+  </nav>
 </div>
 
 </body>

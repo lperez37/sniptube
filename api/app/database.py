@@ -21,8 +21,38 @@ async def get_db() -> aiosqlite.Connection:
     db = await aiosqlite.connect(str(DB_PATH))
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA journal_mode=WAL")
+    # NORMAL is the recommended pairing with WAL: durability across app crashes
+    # with far fewer fsyncs than the FULL default.
+    await db.execute("PRAGMA synchronous=NORMAL")
+    # Wait for a concurrent writer (API vs worker) instead of failing
+    # immediately with "database is locked".
+    await db.execute("PRAGMA busy_timeout=5000")
     await db.execute("PRAGMA foreign_keys=ON")
     return db
+
+
+def _parse_video(row: aiosqlite.Row) -> dict:
+    d = dict(row)
+    d["subtitles"] = json.loads(d["subtitles"]) if d["subtitles"] else []
+    return d
+
+
+def _parse_job(row: aiosqlite.Row) -> dict:
+    d = dict(row)
+    d["params"] = json.loads(d["params"]) if d["params"] else {}
+    return d
+
+
+async def _fetch_video(db: aiosqlite.Connection, video_id: str) -> dict | None:
+    cursor = await db.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
+    row = await cursor.fetchone()
+    return _parse_video(row) if row is not None else None
+
+
+async def _fetch_job(db: aiosqlite.Connection, job_id: str) -> dict | None:
+    cursor = await db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,))
+    row = await cursor.fetchone()
+    return _parse_job(row) if row is not None else None
 
 
 async def init_db() -> None:
@@ -57,6 +87,10 @@ async def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_jobs_video_id ON jobs(video_id);
             CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+            -- get_active_job / get_derivative_result_paths filter on all three
+            CREATE INDEX IF NOT EXISTS idx_jobs_video_type_status ON jobs(video_id, type, status);
+            -- list_active_jobs filters status(+type) and sorts by created_at
+            CREATE INDEX IF NOT EXISTS idx_jobs_status_type_created ON jobs(status, type, created_at DESC);
         """)
         await db.commit()
 
@@ -85,7 +119,7 @@ async def create_video(video_id: str, youtube_id: str, url: str) -> dict:
             (video_id, youtube_id, url, _now()),
         )
         await db.commit()
-        return await get_video(video_id)
+        return await _fetch_video(db, video_id)
     finally:
         await db.close()
 
@@ -93,13 +127,7 @@ async def create_video(video_id: str, youtube_id: str, url: str) -> dict:
 async def get_video(video_id: str) -> dict | None:
     db = await get_db()
     try:
-        cursor = await db.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
-        row = await cursor.fetchone()
-        if row is None:
-            return None
-        d = dict(row)
-        d["subtitles"] = json.loads(d["subtitles"]) if d["subtitles"] else []
-        return d
+        return await _fetch_video(db, video_id)
     finally:
         await db.close()
 
@@ -109,12 +137,7 @@ async def list_videos() -> list[dict]:
     try:
         cursor = await db.execute("SELECT * FROM videos ORDER BY created_at DESC")
         rows = await cursor.fetchall()
-        results = []
-        for row in rows:
-            d = dict(row)
-            d["subtitles"] = json.loads(d["subtitles"]) if d["subtitles"] else []
-            results.append(d)
-        return results
+        return [_parse_video(row) for row in rows]
     finally:
         await db.close()
 
@@ -137,7 +160,7 @@ async def update_video(video_id: str, **kwargs) -> dict | None:
         vals.append(video_id)
         await db.execute(f"UPDATE videos SET {', '.join(sets)} WHERE id = ?", vals)
         await db.commit()
-        return await get_video(video_id)
+        return await _fetch_video(db, video_id)
     finally:
         await db.close()
 
@@ -163,7 +186,7 @@ async def create_job(job_id: str, video_id: str, job_type: str, params: dict) ->
             (job_id, video_id, job_type, json.dumps(params), now, now),
         )
         await db.commit()
-        return await get_job(job_id)
+        return await _fetch_job(db, job_id)
     finally:
         await db.close()
 
@@ -171,13 +194,7 @@ async def create_job(job_id: str, video_id: str, job_type: str, params: dict) ->
 async def get_job(job_id: str) -> dict | None:
     db = await get_db()
     try:
-        cursor = await db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,))
-        row = await cursor.fetchone()
-        if row is None:
-            return None
-        d = dict(row)
-        d["params"] = json.loads(d["params"]) if d["params"] else {}
-        return d
+        return await _fetch_job(db, job_id)
     finally:
         await db.close()
 
@@ -198,7 +215,7 @@ async def update_job(job_id: str, **kwargs) -> dict | None:
         vals.append(job_id)
         await db.execute(f"UPDATE jobs SET {', '.join(sets)} WHERE id = ?", vals)
         await db.commit()
-        return await get_job(job_id)
+        return await _fetch_job(db, job_id)
     finally:
         await db.close()
 
@@ -257,12 +274,7 @@ async def list_active_jobs(job_type: str | None = None) -> list[dict]:
                 "SELECT * FROM jobs WHERE status IN ('queued','running') ORDER BY created_at DESC"
             )
         rows = await cursor.fetchall()
-        results = []
-        for row in rows:
-            d = dict(row)
-            d["params"] = json.loads(d["params"]) if d["params"] else {}
-            results.append(d)
-        return results
+        return [_parse_job(row) for row in rows]
     finally:
         await db.close()
 
@@ -277,11 +289,7 @@ async def get_active_job(video_id: str, job_type: str) -> dict | None:
             (video_id, job_type),
         )
         row = await cursor.fetchone()
-        if row is None:
-            return None
-        d = dict(row)
-        d["params"] = json.loads(d["params"]) if d["params"] else {}
-        return d
+        return _parse_job(row) if row is not None else None
     finally:
         await db.close()
 
@@ -335,7 +343,7 @@ async def set_video_protected(video_id: str, protected: bool) -> dict | None:
     try:
         await db.execute("UPDATE videos SET protected = ? WHERE id = ?", (int(protected), video_id))
         await db.commit()
-        return await get_video(video_id)
+        return await _fetch_video(db, video_id)
     finally:
         await db.close()
 
@@ -349,12 +357,7 @@ async def list_expired_unprotected(max_age_days: int) -> list[dict]:
             (cutoff.isoformat(),),
         )
         rows = await cursor.fetchall()
-        results = []
-        for row in rows:
-            d = dict(row)
-            d["subtitles"] = json.loads(d["subtitles"]) if d["subtitles"] else []
-            results.append(d)
-        return results
+        return [_parse_video(row) for row in rows]
     finally:
         await db.close()
 
@@ -367,11 +370,6 @@ async def list_jobs_for_video(video_id: str) -> list[dict]:
             (video_id,),
         )
         rows = await cursor.fetchall()
-        results = []
-        for row in rows:
-            d = dict(row)
-            d["params"] = json.loads(d["params"]) if d["params"] else {}
-            results.append(d)
-        return results
+        return [_parse_job(row) for row in rows]
     finally:
         await db.close()
