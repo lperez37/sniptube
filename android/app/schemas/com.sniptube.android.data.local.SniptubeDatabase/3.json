@@ -1,0 +1,762 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "4d032b0e20156ec25e885c6f9084ab84",
+    "entities": [
+      {
+        "tableName": "offline_videos",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverIdentity` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `sourceUrl` TEXT NOT NULL, `serverVideoId` TEXT, `title` TEXT NOT NULL, `durationMs` INTEGER, `thumbnailUrl` TEXT, `uploader` TEXT, `serverStatus` TEXT, `serverFileSizeBytes` INTEGER, `metadataUpdatedAt` INTEGER NOT NULL, PRIMARY KEY(`serverIdentity`, `youtubeId`))",
+        "fields": [
+          {
+            "fieldPath": "serverIdentity",
+            "columnName": "serverIdentity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceUrl",
+            "columnName": "sourceUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverVideoId",
+            "columnName": "serverVideoId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "thumbnailUrl",
+            "columnName": "thumbnailUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "uploader",
+            "columnName": "uploader",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "serverStatus",
+            "columnName": "serverStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "serverFileSizeBytes",
+            "columnName": "serverFileSizeBytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "metadataUpdatedAt",
+            "columnName": "metadataUpdatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverIdentity",
+            "youtubeId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_offline_videos_serverIdentity_serverVideoId",
+            "unique": true,
+            "columnNames": [
+              "serverIdentity",
+              "serverVideoId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_offline_videos_serverIdentity_serverVideoId` ON `${TABLE_NAME}` (`serverIdentity`, `serverVideoId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "queue_intents",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverIdentity` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `serverStage` TEXT NOT NULL, `deviceStage` TEXT NOT NULL, `retryStage` TEXT, `userPaused` INTEGER NOT NULL, `resumeDeviceStage` TEXT, `retryCount` INTEGER NOT NULL, `nextAttemptAt` INTEGER, `errorCode` TEXT, `errorMessage` TEXT, `generation` INTEGER NOT NULL, `requestedAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`serverIdentity`, `youtubeId`), FOREIGN KEY(`serverIdentity`, `youtubeId`) REFERENCES `offline_videos`(`serverIdentity`, `youtubeId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "serverIdentity",
+            "columnName": "serverIdentity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverStage",
+            "columnName": "serverStage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceStage",
+            "columnName": "deviceStage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retryStage",
+            "columnName": "retryStage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "userPaused",
+            "columnName": "userPaused",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resumeDeviceStage",
+            "columnName": "resumeDeviceStage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "retryCount",
+            "columnName": "retryCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "nextAttemptAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "errorCode",
+            "columnName": "errorCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "errorMessage",
+            "columnName": "errorMessage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "generation",
+            "columnName": "generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestedAt",
+            "columnName": "requestedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverIdentity",
+            "youtubeId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "offline_videos",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "serverIdentity",
+              "youtubeId"
+            ],
+            "referencedColumns": [
+              "serverIdentity",
+              "youtubeId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "server_job_bindings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverIdentity` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `jobId` TEXT NOT NULL, `status` TEXT NOT NULL, `progress` INTEGER NOT NULL, `boundAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`serverIdentity`, `youtubeId`), FOREIGN KEY(`serverIdentity`, `youtubeId`) REFERENCES `queue_intents`(`serverIdentity`, `youtubeId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "serverIdentity",
+            "columnName": "serverIdentity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "jobId",
+            "columnName": "jobId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progress",
+            "columnName": "progress",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "boundAt",
+            "columnName": "boundAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverIdentity",
+            "youtubeId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_server_job_bindings_serverIdentity_jobId",
+            "unique": true,
+            "columnNames": [
+              "serverIdentity",
+              "jobId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_server_job_bindings_serverIdentity_jobId` ON `${TABLE_NAME}` (`serverIdentity`, `jobId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "queue_intents",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "serverIdentity",
+              "youtubeId"
+            ],
+            "referencedColumns": [
+              "serverIdentity",
+              "youtubeId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "device_transfer_bindings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverIdentity` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `transferId` TEXT NOT NULL, `temporaryPath` TEXT NOT NULL, `destinationPath` TEXT NOT NULL, `bytesDownloaded` INTEGER NOT NULL, `totalBytes` INTEGER, `etag` TEXT, `lastModified` TEXT, `generation` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `cacheKey` TEXT, PRIMARY KEY(`serverIdentity`, `youtubeId`), FOREIGN KEY(`serverIdentity`, `youtubeId`) REFERENCES `queue_intents`(`serverIdentity`, `youtubeId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "serverIdentity",
+            "columnName": "serverIdentity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transferId",
+            "columnName": "transferId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "temporaryPath",
+            "columnName": "temporaryPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "destinationPath",
+            "columnName": "destinationPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bytesDownloaded",
+            "columnName": "bytesDownloaded",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalBytes",
+            "columnName": "totalBytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "etag",
+            "columnName": "etag",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastModified",
+            "columnName": "lastModified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "generation",
+            "columnName": "generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cacheKey",
+            "columnName": "cacheKey",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverIdentity",
+            "youtubeId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_device_transfer_bindings_transferId",
+            "unique": true,
+            "columnNames": [
+              "transferId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_device_transfer_bindings_transferId` ON `${TABLE_NAME}` (`transferId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "queue_intents",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "serverIdentity",
+              "youtubeId"
+            ],
+            "referencedColumns": [
+              "serverIdentity",
+              "youtubeId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "local_files",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverIdentity` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `kind` TEXT NOT NULL, `trackKey` TEXT NOT NULL, `path` TEXT NOT NULL, `byteSize` INTEGER NOT NULL, `contentType` TEXT, `language` TEXT, `etag` TEXT, `lastModified` TEXT, `generation` INTEGER NOT NULL, `validatedAt` INTEGER NOT NULL, `assetType` TEXT NOT NULL, `cacheKey` TEXT, PRIMARY KEY(`serverIdentity`, `youtubeId`, `kind`, `trackKey`), FOREIGN KEY(`serverIdentity`, `youtubeId`) REFERENCES `offline_videos`(`serverIdentity`, `youtubeId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "serverIdentity",
+            "columnName": "serverIdentity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackKey",
+            "columnName": "trackKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "byteSize",
+            "columnName": "byteSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentType",
+            "columnName": "contentType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "language",
+            "columnName": "language",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "etag",
+            "columnName": "etag",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastModified",
+            "columnName": "lastModified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "generation",
+            "columnName": "generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "validatedAt",
+            "columnName": "validatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetType",
+            "columnName": "assetType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cacheKey",
+            "columnName": "cacheKey",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverIdentity",
+            "youtubeId",
+            "kind",
+            "trackKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_local_files_path",
+            "unique": true,
+            "columnNames": [
+              "path"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_local_files_path` ON `${TABLE_NAME}` (`path`)"
+          },
+          {
+            "name": "index_local_files_serverIdentity_youtubeId",
+            "unique": false,
+            "columnNames": [
+              "serverIdentity",
+              "youtubeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_local_files_serverIdentity_youtubeId` ON `${TABLE_NAME}` (`serverIdentity`, `youtubeId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "offline_videos",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "serverIdentity",
+              "youtubeId"
+            ],
+            "referencedColumns": [
+              "serverIdentity",
+              "youtubeId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "playback_progress",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverIdentity` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `positionMs` INTEGER NOT NULL, `durationMs` INTEGER, `updatedAt` INTEGER NOT NULL, `viewed` INTEGER NOT NULL, PRIMARY KEY(`serverIdentity`, `youtubeId`), FOREIGN KEY(`serverIdentity`, `youtubeId`) REFERENCES `offline_videos`(`serverIdentity`, `youtubeId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "serverIdentity",
+            "columnName": "serverIdentity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "positionMs",
+            "columnName": "positionMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "viewed",
+            "columnName": "viewed",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverIdentity",
+            "youtubeId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "offline_videos",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "serverIdentity",
+              "youtubeId"
+            ],
+            "referencedColumns": [
+              "serverIdentity",
+              "youtubeId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "collections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL COLLATE NOCASE, `keepOffline` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keepOffline",
+            "columnName": "keepOffline",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_collections_name",
+            "unique": true,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_collections_name` ON `${TABLE_NAME}` (`name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "collection_memberships",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`collectionId` TEXT NOT NULL, `serverIdentity` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `addedAt` INTEGER NOT NULL, PRIMARY KEY(`collectionId`, `serverIdentity`, `youtubeId`), FOREIGN KEY(`collectionId`) REFERENCES `collections`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`serverIdentity`, `youtubeId`) REFERENCES `offline_videos`(`serverIdentity`, `youtubeId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "collectionId",
+            "columnName": "collectionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverIdentity",
+            "columnName": "serverIdentity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "addedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "collectionId",
+            "serverIdentity",
+            "youtubeId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_collection_memberships_serverIdentity_youtubeId",
+            "unique": false,
+            "columnNames": [
+              "serverIdentity",
+              "youtubeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_collection_memberships_serverIdentity_youtubeId` ON `${TABLE_NAME}` (`serverIdentity`, `youtubeId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "collections",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "collectionId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "offline_videos",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "serverIdentity",
+              "youtubeId"
+            ],
+            "referencedColumns": [
+              "serverIdentity",
+              "youtubeId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "keep_offline_exclusions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverIdentity` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `excludedAt` INTEGER NOT NULL, PRIMARY KEY(`serverIdentity`, `youtubeId`), FOREIGN KEY(`serverIdentity`, `youtubeId`) REFERENCES `offline_videos`(`serverIdentity`, `youtubeId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "serverIdentity",
+            "columnName": "serverIdentity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "excludedAt",
+            "columnName": "excludedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverIdentity",
+            "youtubeId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "offline_videos",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "serverIdentity",
+              "youtubeId"
+            ],
+            "referencedColumns": [
+              "serverIdentity",
+              "youtubeId"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4d032b0e20156ec25e885c6f9084ab84')"
+    ]
+  }
+}

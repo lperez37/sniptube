@@ -27,6 +27,22 @@ The UI is available at **http://localhost:8030**.
 
 > ⚠️ **Security: Sniptube has no built-in authentication.** Anyone who can reach port 8030 can download videos to your disk, delete your library, and use your server as a YouTube proxy. Run it on a private network only (LAN, Tailscale, WireGuard), or put an authenticating proxy in front of it (Cloudflare Access, Authelia, basic auth in Caddy/nginx). Do not port-forward it to the internet as-is.
 
+## Android companion
+
+The native [Android app](android/README.md) searches YouTube through your Sniptube server, syncs videos over Wi-Fi and plays verified downloads offline. It has device-local collections, bulk controls, watched status and storage management. A confirmed **Sync now** can use cellular for selected collection videos after displaying known download MB and unknown sizes. Clip, GIF and audio tools remain in the web/PWA app. First launch asks for a server URL and saves it privately on the phone; no personal hostname or credential ships in the APK.
+
+### Build a debug APK
+
+On Linux x86_64, install Nix with flakes and Python 3. From the repository root:
+
+```bash
+android/scripts/bootstrap-sdk.sh
+android/scripts/gradle.sh :app:assembleDebug
+adb install -r android/artifacts/last-successful-debug.apk  # optional: connected phone
+```
+
+The helper pins JDK 17 and Android SDK 35 locally, requires 15 GiB free space and preserves successful builds at `android/artifacts/last-successful-debug.apk` (also `android/app/build/outputs/apk/debug/app-debug.apk`). For tests and lint, run `android/scripts/gradle.sh :app:testDebugUnitTest :app:lintDebug`. The debug APK is not release-signed. Android Studio and direct-Gradle instructions, Wi-Fi/cellular policy and device-test limitations are in [`android/README.md`](android/README.md); CI also uploads a debug APK artifact.
+
 ## How It Works
 
 ```
@@ -119,6 +135,8 @@ If the video was already downloaded:
 ```json
 {"video_id": "a1b2c3d4e5f6", "job_id": "", "status": "already_exists"}
 ```
+
+An existing database record marked ready whose source file is missing is reported as `failed` in list/detail responses; posting its YouTube URL again queues a replacement source download instead of returning `already_exists`.
 
 ### List Videos
 

@@ -131,12 +131,38 @@ async def test_create_video_concurrent_download_dedupes(client, fake_pool):
     assert len(fake_pool.calls) == 1  # NOT enqueued twice
 
 
-async def test_create_video_already_exists_when_ready(client, fake_pool):
+async def test_create_video_already_exists_when_ready(client, fake_pool, data_dir):
     r1 = await client.post("/videos", json={"url": YT_URL})
-    await db.update_video(r1.json()["video_id"], status="ready")
+    video_id = r1.json()["video_id"]
+    await db.update_video(video_id, status="ready")
+    source = data_dir / "videos" / video_id / "source.mp4"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"fixture")
     r2 = await client.post("/videos", json={"url": YT_URL})
     assert r2.json() == {"video_id": r1.json()["video_id"], "job_id": "", "status": "already_exists"}
     assert len(fake_pool.calls) == 1
+
+
+async def test_create_video_reacquires_ready_record_with_missing_source(client, fake_pool, data_dir):
+    first = await client.post("/videos", json={"url": YT_URL})
+    video_id = first.json()["video_id"]
+    (data_dir / "videos" / video_id / "source.mp4").unlink(missing_ok=True)
+    await db.update_job(first.json()["job_id"], status="completed")
+    await db.update_video(video_id, status="ready")
+    listing = await client.get("/videos")
+    assert next(v for v in listing.json() if v["id"] == video_id)["status"] == "failed"
+    detail = await client.get(f"/videos/{video_id}")
+    assert detail.json()["status"] == "failed"
+    repaired = await client.post("/videos", json={"url": YT_URL})
+    assert repaired.status_code == 200
+    assert repaired.json()["video_id"] == video_id
+    assert repaired.json()["status"] == "queued"
+    assert repaired.json()["job_id"] != first.json()["job_id"]
+    assert len(fake_pool.calls) == 2
+    assert (await db.get_video(video_id))["status"] == "downloading"
+    duplicate = await client.post("/videos", json={"url": YT_URL})
+    assert duplicate.json()["job_id"] == repaired.json()["job_id"]
+    assert len(fake_pool.calls) == 2
 
 
 async def test_create_video_invalid_url_returns_400(client, fake_pool):

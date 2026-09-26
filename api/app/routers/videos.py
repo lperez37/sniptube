@@ -52,7 +52,7 @@ async def create_video_endpoint(body: VideoCreate):
 
     Accepts `youtube.com` and `youtu.be` URLs (including mobile `m.youtube.com`).
     The video ID is deterministic — submitting the same URL twice returns `already_exists`
-    instead of re-downloading.
+    if the source file is still present, or repairs a missing source.
 
     **After calling this endpoint**, poll `GET /jobs/{job_id}` until the status
     becomes `completed` or `failed`. Once completed, the video appears in your library.
@@ -72,11 +72,13 @@ async def create_video_endpoint(body: VideoCreate):
     # Check if already exists and ready
     existing = await get_video(video_id)
     if existing and existing["status"] == "ready":
-        return VideoCreateResponse(video_id=video_id, job_id="", status="already_exists")
+        source_size = await asyncio.to_thread(_source_file_size, video_id)
+        if source_size is not None and source_size > 0:
+            return VideoCreateResponse(video_id=video_id, job_id="", status="already_exists")
 
     # A download is already in flight: return its job instead of enqueuing a
     # second one that would write the same source file concurrently.
-    if existing and existing["status"] == "downloading":
+    if existing and (existing["status"] == "downloading" or existing["status"] == "ready"):
         active = await get_active_job(video_id, "download")
         if active:
             return VideoCreateResponse(video_id=video_id, job_id=active["id"], status="queued")
@@ -119,7 +121,10 @@ async def list_videos_endpoint():
                     total_size += fp.stat().st_size
             src_size = _source_file_size(v["id"])
             meta_fields = _read_meta_fields(v["id"])
-            results.append(VideoResponse(**v, file_size=src_size, derivatives_count=stats["count"], derivatives_total_size=total_size, **meta_fields))
+            # A database Ready row without its source cannot be synced or played.
+            # Exposing it as failed lets clients submit POST /videos to repair it.
+            visible = {**v, "status": "failed"} if v["status"] == "ready" and not src_size else v
+            results.append(VideoResponse(**visible, file_size=src_size, derivatives_count=stats["count"], derivatives_total_size=total_size, **meta_fields))
         return results
 
     return await asyncio.to_thread(build_results)
@@ -161,7 +166,8 @@ async def get_video_endpoint(video_id: str):
             total_size += fp.stat().st_size
     src_size = _source_file_size(video_id)
     meta_fields = _read_meta_fields(video_id)
-    return VideoResponse(**video, file_size=src_size, derivatives_count=len(paths), derivatives_total_size=total_size, **meta_fields)
+    visible = {**video, "status": "failed"} if video["status"] == "ready" and not src_size else video
+    return VideoResponse(**visible, file_size=src_size, derivatives_count=len(paths), derivatives_total_size=total_size, **meta_fields)
 
 
 @router.delete("/{video_id}",

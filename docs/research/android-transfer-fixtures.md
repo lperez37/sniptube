@@ -1,0 +1,19 @@
+# Android transfer path — iteration 3 evidence
+
+26 September 2026. Stage 6 remains **open** pending integrated/device acceptance.
+
+## Primary sources and implementation choice
+
+- [Android's media-download guide](https://developer.android.com/media/media3/exoplayer/downloading-media) documents DownloadService, persistent DownloadManager/DownloadIndex, NoOpCacheEvictor, per-item stop reasons and sampled progress. The [Media3 release list](https://developer.android.com/jetpack/androidx/releases/media3) currently lists 1.11.0 stable; this API-35 project pins **1.8.0**, a compatible stable version actually compiled/linted locally. `DownloadRequest`'s [customCacheKey](https://developer.android.com/reference/androidx/media3/exoplayer/offline/DownloadRequest) supports progressive media. The [DownloadService API](https://developer.android.com/reference/androidx/media3/exoplayer/offline/DownloadService) lists the five-argument notification-channel constructor used here. Research used one search and two sequential batched extracts; no coding-model provider beyond the user-authorized subscription.
+- [NetworkCapabilities](https://developer.android.com/reference/android/net/NetworkCapabilities) and [ConnectivityManager](https://developer.android.com/reference/android/net/ConnectivityManager) confirm that transports and meteredness are different and capabilities can change. A second research task used one search and one extract. The conservative local policy follows the default VPN rather than pinning a physical network; it waits if VPN capabilities include cellular or fail to identify Wi-Fi. Runtime VPN transition checks remain pending.
+- [Earlier official-source review](android-download-plan-review.md) records the cache null-upstream, dataSync, background-start and range requirements. The backend `FileResponse` contract was checked using disposable ASGI fixtures, not the live video store.
+
+## Fixture observations
+
+- `/tmp/opencode/sniptube-api-tests/bin/python -m pytest tests/test_android_source_ranges.py -q` from `api/`: **3 passed**. For fixture `source.mp4`, `.mkv`, `.webm` the endpoint returns `application/octet-stream`, a strong `ETag`, a valid 206 `Content-Range` for `bytes=0-31`, a valid bounded resumed 206 with the same strong ETag and `If-Range`, and 200 full representation when the ETag mismatches. This is dependency-version evidence, not a claim that video IDs imply immutable bytes.
+- Media3 1.8.0 `DownloadManager` with `Requirements(0)` completed progressive downloads of three extensionless/octet-stream binary fixtures into a non-evicting cache. The same cache with **null upstream** returned the exact fixture bytes after the HTTP server was shut down; reads beyond cache coverage raised `IOException`. No media decoding was attempted.
+- An interrupted 256 KiB Media3 fixture actually resumed with a **bounded** request, observed `Range: bytes=9216-262151`; the first implementation's open-ended-only parser would have rejected it. The parser now accepts both bounded and open-ended byte ranges, sends `If-Range`, and checks the returned 206 offset, total length and strong validator. The fixture asserts the completed full cache and a nonzero resume offset. This proves partial prefix reuse for this isolated fixture; app-service restart and mutated-source handling still need an integrated test.
+
+## Remaining acceptance before closing stage 6
+
+Verify a full app-owned enqueue→probe→DownloadService→Room publish path with a disposable server, including changed validator/200 response, truncated/auth HTML response, restart while paused, loss of Wi-Fi during a read, and local removal during transfer. Exercise FGS start/timeout and notification denial on a device/emulator where available, recording any unperformed API-level checks. The emulator is not installed for this iteration and no emulator images were downloaded.

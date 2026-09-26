@@ -1,5 +1,5 @@
 # Runtime data (downloaded videos, SQLite database)
-data/
+/data/
 
 # Cloudflare tunnel credentials and per-instance config - NEVER commit.
 # Keep your tunnel service in docker-compose.override.yml (also ignored).
@@ -21,3 +21,19 @@ __pycache__/
 .playwright-mcp/
 .claude/settings.local.json
 .DS_Store
+
+# Android build products, local SDK configuration, and signing material
+android/.gradle
+android/.kotlin/
+android/**/build
+android/local.properties
+android/.idea/
+android/.toolchain
+android/artifacts
+*.jks
+*.keystore
+
+# Ralph loop artifacts
+.ralph/
+/loop.sh
+/IMPLEMENTATION_PLAN.md

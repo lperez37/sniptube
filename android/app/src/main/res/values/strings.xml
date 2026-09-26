@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="download_channel">Offline downloads</string>
+    <string name="app_name">Sniptube</string>
+    <string name="sniptube_logo_description">Sniptube logo</string>
+    <string name="connect_title">Connect to Sniptube</string>
+    <string name="connect_explanation">Choose the server this phone will use for search and offline sync.</string>
+    <string name="server_url_label">Server URL</string>
+    <string name="server_url_supporting_text">Use HTTPS, or HTTP only on a trusted private network.</string>
+    <string name="save_and_check_connection">Save and check connection</string>
+</resources>
