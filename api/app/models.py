@@ -74,6 +74,8 @@ class VideoResponse(BaseModel):
     duration: float | None = Field(None, description="Video duration in seconds")
     language: str | None = Field(None, description="Primary language of the video (e.g. 'en', 'es')")
     thumbnail_url: str | None = Field(None, description="YouTube thumbnail URL")
+    upload_date: str | None = Field(None, description="Original YouTube publish date (YYYYMMDD), when available")
+    uploader: str | None = Field(None, description="YouTube channel name, when available")
     subtitles: list[str] = Field([], description="List of available subtitle language codes")
     protected: bool = Field(False, description="Whether this video is protected from auto-pruning")
     status: str = Field(..., description="Video status: 'downloading', 'ready', or 'failed'")

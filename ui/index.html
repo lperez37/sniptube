@@ -103,6 +103,10 @@
         <img src="/logo.svg" alt="" class="header-logo"> Sniptube
       </h1>
       <nav>
+        <button class="btn btn-ghost" x-show="page !== 'detail'" @click="refreshCurrent()"
+                :disabled="refreshing || searching" aria-label="Refresh videos" title="Refresh videos">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 11.5-2L20 8M4 16l2.5 3A7 7 0 0 0 18 17"/></svg>
+        </button>
         <!-- Background downloads indicator -->
         <div class="dl-indicator" x-show="activeDownloadCount" x-transition.opacity style="display:none">
           <button class="dl-indicator-btn" @click="downloadsMenuOpen = !downloadsMenuOpen"
@@ -133,9 +137,13 @@
   </header>
 
   <main>
+    <div class="pull-refresh" x-show="pullDistance > 0 || refreshing" style="display:none" role="status" aria-live="polite">
+      <span class="spinner spinner-small" x-show="refreshing" aria-hidden="true"></span>
+      <span x-text="refreshing ? 'Refreshing…' : (pullDistance >= 64 ? 'Release to refresh' : 'Pull to refresh')"></span>
+    </div>
 
     <!-- Download Page -->
-    <div x-show="page === 'download'" x-transition>
+    <div x-show="page === 'download'">
       <div class="page-section">
         <h2>Download Video</h2>
         <div class="download-form">
@@ -203,14 +211,14 @@
         </div>
 
         <!-- Search results header -->
-        <div class="search-results-header" x-show="searchResults.length && searchState !== 'loading'" style="margin-top:1.5rem">
+        <div class="search-results-header" x-show="searchResults.length" style="margin-top:1.5rem">
           <span class="search-results-count"
                 x-text="searchResults.length + ' results for “' + downloadUrl.trim() + '”'"></span>
           <button class="btn btn-ghost btn-small" @click="clearSearch()">Clear results</button>
         </div>
 
         <!-- Search skeletons (initial load) -->
-        <div class="video-grid" x-show="searchState === 'loading'" style="margin-top:0.75rem">
+        <div class="video-grid" x-show="searchState === 'loading' && !searchResults.length" style="margin-top:0.75rem">
           <template x-for="i in 6" :key="'search-skel-' + i">
             <div class="skeleton-card">
               <div class="skeleton-thumb"></div>
@@ -240,7 +248,7 @@
         </div>
 
         <!-- Search results -->
-        <div class="video-grid" x-show="searchResults.length && searchState !== 'loading'" style="margin-top:0.75rem">
+        <div class="video-grid" x-show="searchResults.length" style="margin-top:0.75rem">
           <template x-for="result in searchResults" :key="result.youtube_id">
             <div class="card video-card search-result-card"
                  :class="{'search-result-downloaded': result.already_downloaded, 'search-result-busy': result._downloading}"
@@ -274,7 +282,7 @@
                   <span class="badge badge-small" x-show="result.view_count"
                         x-text="formatViewCount(result.view_count) + ' views'"></span>
                   <span class="badge badge-small" x-show="result.upload_date"
-                        x-text="formatUploadDate(result.upload_date)"></span>
+                        x-text="'Uploaded ' + formatUploadDate(result.upload_date)"></span>
                 </div>
                 <p class="search-description" x-show="result.description"
                    x-text="result.description"></p>
@@ -331,7 +339,7 @@
     </div>
 
     <!-- Video List -->
-    <div x-show="page === 'list'" x-transition>
+    <div x-show="page === 'list'">
       <div class="page-section">
         <div class="library-header">
           <h2>Library</h2>
@@ -382,6 +390,7 @@
               </div>
               <div class="video-info">
                 <h3 x-text="video.title || 'Untitled'"></h3>
+                <p class="upload-date" x-show="video.upload_date" x-text="'Uploaded ' + formatUploadDate(video.upload_date)"></p>
                 <div class="video-meta">
                   <span class="badge badge-small badge-protected" x-show="video.protected">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -408,7 +417,7 @@
     </div>
 
     <!-- Video Detail -->
-    <div x-show="page === 'detail'" x-transition>
+    <div x-show="page === 'detail'">
       <div class="page-section" x-show="currentVideo">
         <button class="btn btn-ghost back-btn" @click="navigateBack()">&larr; Back</button>
 
@@ -447,6 +456,7 @@
                 </div>
               </div>
               <div class="video-meta detail-meta">
+                <span class="badge badge-small" x-show="currentVideo?.upload_date" x-text="'Uploaded ' + formatUploadDate(currentVideo?.upload_date)"></span>
                 <span class="badge badge-small" x-text="formatDuration(currentVideo?.duration)"></span>
                 <span class="badge badge-small" x-show="currentVideo?.language" x-text="currentVideo?.language"></span>
                 <span class="badge badge-small badge-subs" x-show="subtitleTracks.length"

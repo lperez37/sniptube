@@ -163,6 +163,29 @@ class BrowseViewModelTest {
         }
     }
 
+    @Test fun `refresh retains loaded cards while waiting and after an offline error`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val fake = FakeBrowse()
+            fake.searchResult = { _, page -> BrowsePage(listOf(item("a")), page, false) }
+            val model = BrowseViewModel(fake)
+            model.updateQuery("travel")
+            advanceTimeBy(350)
+            runCurrent()
+            val response = CompletableDeferred<BrowsePage>()
+            fake.searchResult = { _, _ -> response.await() }
+            model.retrySearch()
+            runCurrent()
+            assertTrue(model.state.value.search.loading)
+            assertEquals("a", model.state.value.search.videos.single().youtubeId)
+            response.completeExceptionally(java.io.IOException("Offline"))
+            runCurrent()
+            assertFalse(model.state.value.search.loading)
+            assertEquals("a", model.state.value.search.videos.single().youtubeId)
+            assertEquals("Offline", model.state.value.search.error)
+        } finally { Dispatchers.resetMain() }
+    }
+
     private class FakeBrowse : BrowseOperations {
         val queued = MutableStateFlow(emptySet<String>())
         val enqueued = mutableListOf<BrowseVideo>()

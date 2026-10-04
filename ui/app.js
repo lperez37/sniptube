@@ -14,6 +14,13 @@ function app() {
     videosPerPage: 24,
     videosDisplayCount: 24,
     _loadMoreObserver: null,
+    refreshing: false,
+    pullDistance: 0,
+    _pullStart: null,
+    _scrollPositions: {},
+    _restoringScroll: false,
+    _resultsQueryKey: '',
+    _initialized: false,
 
     // Download & Search
     downloadUrl: '',
@@ -117,6 +124,14 @@ function app() {
     _pollGeneration: 0,
 
     async init() {
+      if (this._initialized) return;
+      this._initialized = true;
+      history.scrollRestoration = 'manual';
+      window.addEventListener('scroll', () => this._saveScroll(), { passive: true });
+      document.addEventListener('touchstart', (event) => this.startPull(event), { passive: true });
+      document.addEventListener('touchmove', (event) => this.movePull(event), { passive: false });
+      document.addEventListener('touchend', () => this.endPull(), { passive: true });
+      document.addEventListener('touchcancel', () => { this._pullStart = null; this.pullDistance = 0; }, { passive: true });
       if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
       window.addEventListener('hashchange', () => this._handleRoute());
       this.$watch('derivativesPanelOpen', (open) => {
@@ -215,11 +230,12 @@ function app() {
         // started on a video deep link (init skips loadVideos on that path).
         if (!this.videos.length) this.loadVideos({ background: true });
         this._restoreSearchFromHash(hash);
+        this._restoreScroll();
       } else {
         this._clearPolling();
         this._loadMoreObserver?.disconnect();
         this.page = 'list';
-        this.loadVideos();
+        this.loadVideos({ background: this.videos.length > 0 }).then(() => this._restoreScroll());
       }
     },
 
@@ -262,7 +278,7 @@ function app() {
 
     _syncSearchHash() {
       const q = this.downloadUrl.trim();
-      if (!q || !this.searchMode) return;
+      if (!q || !this.searchMode || this.page !== 'download') return;
       const params = new URLSearchParams({ q });
       if (this.searchFilters.duration !== 'any') params.set('duration', this.searchFilters.duration);
       if (this.searchFilters.sort_by !== 'relevance') params.set('sort', this.searchFilters.sort_by);
@@ -272,11 +288,15 @@ function app() {
 
     // --- Navigation ---
     navigate(page) {
+      this._saveScroll();
       if (page === 'list') {
-        window.location.hash = '#/';
+        history.pushState(null, '', '#/');
       } else if (page === 'download') {
-        window.location.hash = '#/download';
+        history.pushState(null, '', '#/download');
+        this.page = 'download';
+        this._syncSearchHash();
       }
+      this._handleRoute();
     },
 
     navigateBack() {
@@ -287,8 +307,62 @@ function app() {
       }
     },
 
+    _scrollKey() {
+      return this.page === 'download' ? `download:${this._resultsQueryKey}` : this.page;
+    },
+
+    _saveScroll() {
+      if (!this._restoringScroll && this.page !== 'detail') this._scrollPositions[this._scrollKey()] = window.scrollY;
+    },
+
+    _restoreScroll() {
+      const key = this._scrollKey();
+      const y = this._scrollPositions[key] || 0;
+      this._restoringScroll = true;
+      this.$nextTick(() => requestAnimationFrame(() => {
+        if (this._scrollKey() === key) window.scrollTo({ top: y, behavior: 'instant' });
+        this._restoringScroll = false;
+      }));
+    },
+
+    startPull(event) {
+      this._pullStart = null;
+      if (this.page === 'detail' || this.refreshing || this.searching || window.scrollY > 0 || event.touches.length !== 1 ||
+          event.target.closest('input, textarea, select, button, video, [role="dialog"]')) return;
+      this._pullStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    },
+
+    movePull(event) {
+      if (!this._pullStart) return;
+      if (event.touches.length !== 1 || window.scrollY > 0) { this._pullStart = null; this.pullDistance = 0; return; }
+      const dy = event.touches[0].clientY - this._pullStart.y;
+      const dx = Math.abs(event.touches[0].clientX - this._pullStart.x);
+      if (dy < 0 || dx > Math.max(12, dy)) { this._pullStart = null; this.pullDistance = 0; return; }
+      if (dy > 12 && event.cancelable) event.preventDefault();
+      this.pullDistance = Math.min(96, dy * 0.5);
+    },
+
+    endPull() {
+      const refresh = this._pullStart && this.pullDistance >= 64;
+      this._pullStart = null;
+      this.pullDistance = 0;
+      if (refresh) this.refreshCurrent();
+    },
+
+    async refreshCurrent() {
+      if (this.refreshing || this.searching || this.page === 'detail') return;
+      this.refreshing = true;
+      try {
+        await Promise.all([
+          this.loadVideos({ background: true, reportError: true }),
+          this._resumeActiveDownloads(),
+          this.page === 'download' && this.searchMode ? this.performSearch(1) : Promise.resolve(),
+        ]);
+      } finally { this.refreshing = false; }
+    },
+
     // --- Videos ---
-    async loadVideos({ background = false } = {}) {
+    async loadVideos({ background = false, reportError = false } = {}) {
       // background: refresh data in place - no skeleton flash, and keep the
       // user's infinite-scroll position instead of collapsing to page one.
       if (!background) this.loadingVideos = true;
@@ -298,7 +372,7 @@ function app() {
         this.videos = await res.json();
         if (!background) this.videosDisplayCount = this.videosPerPage;
       } catch (e) {
-        if (!background) this.toast('Failed to load videos', 'error');
+        if (!background || reportError) this.toast('Failed to load videos', 'error');
       }
       this.loadingVideos = false;
       this.$nextTick(() => this._setupLoadMore());
@@ -347,6 +421,7 @@ function app() {
     },
 
     async viewVideo(videoId) {
+      this._saveScroll();
       this._clearPolling();
       try {
         const [videoRes, subsRes, derivRes] = await Promise.all([
@@ -376,7 +451,7 @@ function app() {
 
         // Update hash for routing (won't re-trigger if already correct)
         if (window.location.hash !== `#/video/${videoId}`) {
-          window.location.hash = `#/video/${videoId}`;
+          history.pushState(null, '', `#/video/${videoId}`);
         }
 
         // Reload video element after Alpine renders
@@ -385,6 +460,7 @@ function app() {
           if (player) {
             player.load();
           }
+          window.scrollTo({ top: 0, behavior: 'instant' });
         });
 
         // Auto-load transcript
@@ -501,6 +577,12 @@ function app() {
       if (!q || !this.isSearchQuery(q)) return;
       clearTimeout(this._searchDebounce);
       const requestedPage = Math.max(1, Math.min(this.searchMaxPages, page || 1));
+      const queryKey = JSON.stringify([q, this.searchFilters.duration, this.searchFilters.sort_by]);
+      if (requestedPage === 1 && queryKey !== this._resultsQueryKey) {
+        this.searchResults = [];
+        this.selectedResults = {};
+        this._resultsQueryKey = queryKey;
+      }
 
       // Supersede any in-flight search: abort its fetch and invalidate its seq
       // so a slow stale response can never overwrite fresher results.

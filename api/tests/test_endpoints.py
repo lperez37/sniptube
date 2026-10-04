@@ -1,5 +1,7 @@
 """Endpoint tests via httpx.AsyncClient + ASGITransport."""
 
+import json
+
 import yt_dlp
 
 from app import database as db
@@ -7,6 +9,24 @@ from app.routers import search as search_mod
 from app.utils.ids import make_video_id
 
 YT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+
+async def test_library_and_detail_expose_original_upload_date(client, data_dir):
+    video_id = make_video_id(YT_URL)
+    await db.create_video(video_id, "dQw4w9WgXcQ", YT_URL)
+    folder = data_dir / "videos" / video_id
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "meta.json").write_text(json.dumps({"upload_date": "20091025", "uploader": "Rick Astley"}))
+    for url in ("/videos", f"/videos/{video_id}"):
+        response = await client.get(url)
+        assert response.status_code == 200
+        video = response.json()[0] if url == "/videos" else response.json()
+        assert video["upload_date"] == "20091025"
+        assert video["uploader"] == "Rick Astley"
+        assert video["created_at"] != video["upload_date"]
+    (folder / "meta.json").unlink()
+    response = await client.get(f"/videos/{video_id}")
+    assert response.json()["upload_date"] is None
 
 
 def _entries(n):

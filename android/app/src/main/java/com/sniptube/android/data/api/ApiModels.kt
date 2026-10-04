@@ -63,6 +63,8 @@ data class Video(
     @SerialName("derivatives_total_size") val derivativesTotalSize: Long = 0,
     @SerialName("available_heights") val availableHeights: List<Int> = emptyList(),
     @SerialName("source_height") val sourceHeight: Int? = null,
+    @SerialName("upload_date") val uploadDate: String? = null,
+    val uploader: String? = null,
 )
 
 @Serializable

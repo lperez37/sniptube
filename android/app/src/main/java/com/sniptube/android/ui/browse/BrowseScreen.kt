@@ -11,17 +11,19 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.sniptube.android.data.library.*
 import com.sniptube.android.data.local.*
 import com.sniptube.android.ui.library.*
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BrowseScreen(state: BrowseUiState, snapshot: LibrarySnapshot, actions: LibraryActions,
     commands: LibraryCommands, onQueryChange: (String) -> Unit, onLoadMore: () -> Unit,
@@ -30,35 +32,39 @@ fun BrowseScreen(state: BrowseUiState, snapshot: LibrarySnapshot, actions: Libra
     jobs: List<ServerJobBindingEntity>, transfers: List<DeviceTransferBindingEntity>) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
     val selection = rememberVideoSelection("$tab:${if (tab == 0) state.search.query else "library"}")
     val source = if (tab == 0) state.search.videos else state.library.videos
     val videos = remember(source) { source.map { it.offlineMetadata(System.currentTimeMillis()) }.distinctBy { it.key } }
     var adding by remember { mutableStateOf<List<OfflineVideoEntity>?>(null) }
     val queued = remember(snapshot.queue) { snapshot.queue.filter { it.deviceStage != DeviceStage.Removed }.map { VideoKey(it.serverIdentity, it.youtubeId) }.toSet() }
     val ready = remember(snapshot.queue, snapshot.assets) { snapshot.readyKeys() }
-    val waiting = snapshot.queue.count { it.deviceStage != DeviceStage.Removed && VideoKey(it.serverIdentity, it.youtubeId) !in ready }
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val listState = rememberLibraryListState(scrollStore,
         "browse:$serverIdentity:$tab:${if (tab == 0) state.search.query else "library"}", videos.size)
+    val refreshing = if (tab == 0) state.search.loading else state.library.loading
+    val refresh = { if (tab == 0) onRetrySearch() else onRefreshLibrary() }
     Column(Modifier.fillMaxSize()) {
-        if (!keyboardVisible && waiting > 0) SyncOverviewBanner(snapshot, jobs, transfers, onClick = onDownloads)
         TabRow(selectedTabIndex = tab) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("YouTube search") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Server library") })
         }
-        LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
-            item {
-                if (tab == 0) OutlinedTextField(state.search.query, onQueryChange,
+        // Keep focused input outside LazyColumn: IME bring-into-view must not scroll cards to the header.
+        if (tab == 0) OutlinedTextField(state.search.query, onQueryChange,
                     modifier = Modifier.fillMaxWidth().padding(16.dp), singleLine = true,
                     label = { Text("Search YouTube") }, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }))
-                else TextButton(onClick = onRefreshLibrary, enabled = !state.library.loading,
-                    modifier = Modifier.padding(horizontal = 16.dp).heightIn(min = 48.dp)) { Text("Refresh server library") }
+                    keyboardActions = KeyboardActions(onSearch = { focus.clearFocus(); keyboard?.hide() }))
+        TextButton(onClick = refresh, enabled = !refreshing && (tab != 0 || state.search.query.isNotBlank()),
+            modifier = Modifier.padding(horizontal = 16.dp).heightIn(min = 48.dp)) {
+            Text(if (tab == 0) "Refresh results" else "Refresh server library")
+        }
+        PullToRefreshBox(isRefreshing = refreshing, onRefresh = refresh, modifier = Modifier.weight(1f)) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
+            item(key = "browse-header") {
                 val error = if (tab == 0) state.search.error else state.library.error
                 error?.let { Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
                 if (tab == 0 && error != null && videos.isEmpty()) TextButton(onClick = onRetrySearch,
                     enabled = !state.search.loading, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Retry search") }
-                if (if (tab == 0) state.search.loading else state.library.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (videos.isEmpty() && !(if (tab == 0) state.search.loading else state.library.loading)) LibraryEmpty(
                     if (tab == 0 && state.search.query.isBlank()) "Find videos for the trip" else "No videos to show",
                     if (tab == 0) "Search by title, topic or @channel. Downloads remain available even when the server is unreachable."
@@ -84,11 +90,12 @@ fun BrowseScreen(state: BrowseUiState, snapshot: LibrarySnapshot, actions: Libra
                 }
             }
             if (tab == 0 && (state.search.hasMore || state.search.loadingMore)) item {
-                OutlinedButton(onClick = onLoadMore, enabled = !state.search.loadingMore,
+                OutlinedButton(onClick = { focus.clearFocus(); onLoadMore() }, enabled = !state.search.loadingMore,
                     modifier = Modifier.padding(16.dp).heightIn(min = 48.dp)) {
                     Text(if (state.search.loadingMore) "Loading…" else "Load more")
                 }
             }
+        }
         }
         if (!keyboardVisible) SelectionHeader(selection, videos, commands.busy) { selected ->
             Button(onClick = { commands.run { actions.enqueue(selected).summary } }) { Text("Download ${selected.size} offline") }

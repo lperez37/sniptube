@@ -15,14 +15,21 @@ android {
         applicationId = "com.sniptube.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
 
     buildTypes {
+        create("beta") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".beta"
+            versionNameSuffix = "-beta"
+            matchingFallbacks += "debug"
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -31,6 +38,9 @@ android {
             )
         }
     }
+
+    // Keep the development signing identity on persistent disk, outside disposable SDK caches.
+    signingConfigs.getByName("debug").storeFile = rootProject.file(".signing/debug.keystore")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -99,6 +109,8 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.room:room-testing:2.7.2")
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

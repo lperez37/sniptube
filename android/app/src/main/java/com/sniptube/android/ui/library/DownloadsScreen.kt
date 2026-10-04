@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
@@ -14,11 +15,12 @@ import androidx.compose.ui.unit.dp
 import com.sniptube.android.data.library.*
 import com.sniptube.android.data.local.*
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadsScreen(snapshot: LibrarySnapshot, jobs: List<ServerJobBindingEntity>,
     transfers: List<DeviceTransferBindingEntity>, actions: LibraryActions, commands: LibraryCommands,
-    onPlay: (VideoKey) -> Unit, scrollStore: LibraryScrollStore) {
+    onPlay: (VideoKey) -> Unit, scrollStore: LibraryScrollStore,
+    refreshing: Boolean = false, onRefresh: () -> Unit = {}) {
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("All") }
     val selection = rememberVideoSelection("$filter:$query")
@@ -43,8 +45,11 @@ fun DownloadsScreen(snapshot: LibrarySnapshot, jobs: List<ServerJobBindingEntity
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val listState = rememberLibraryListState(scrollStore, "downloads:$filter:$query", visible.size)
     Column(Modifier.fillMaxSize()) {
-    LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
-        item {
+    OutlinedTextField(query, { query = it }, label = { Text("Search downloads") }, singleLine = true,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
+    PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
+    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
+        item(key = "downloads-header") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (!keyboardVisible) Text("Ready for the journey", style = MaterialTheme.typography.headlineMedium)
                 if (!keyboardVisible) Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.large) {
@@ -57,7 +62,6 @@ fun DownloadsScreen(snapshot: LibrarySnapshot, jobs: List<ServerJobBindingEntity
                     }
                 }
                 if (!keyboardVisible) SyncOverviewBanner(snapshot, jobs, transfers)
-                OutlinedTextField(query, { query = it }, label = { Text("Search downloads") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (!keyboardVisible) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("All", "Ready", "Queue").forEach { value ->
                         FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(value) }, modifier = Modifier.heightIn(min = 48.dp))
@@ -102,6 +106,7 @@ fun DownloadsScreen(snapshot: LibrarySnapshot, jobs: List<ServerJobBindingEntity
                 intent?.errorMessage?.let { Text(it, Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.error) }
             }
         }
+    }
     }
         if (!keyboardVisible) SelectionHeader(selection, visible, commands.busy) { selected ->
             val keys = selected.map { it.key }

@@ -160,8 +160,9 @@ class BrowseViewModel(
 
     private suspend fun loadFirstPage(value: String) {
         if (value.isBlank()) return
+        val previous = _state.value.search.takeIf { it.query == value } ?: SearchUiState(query = value)
         _state.value = _state.value.copy(
-            search = SearchUiState(query = value, loading = true),
+            search = previous.copy(loading = true, loadingMore = false, error = null),
         )
         try {
             val page = repository.search(value, 1)
@@ -179,7 +180,7 @@ class BrowseViewModel(
         } catch (error: Exception) {
             if (query.value != value) return
             _state.value = _state.value.copy(
-                search = SearchUiState(query = value, error = error.userMessage()),
+                search = previous.copy(loading = false, loadingMore = false, error = error.userMessage()),
             )
         }
     }

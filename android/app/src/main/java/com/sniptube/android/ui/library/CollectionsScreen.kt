@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -25,11 +26,11 @@ import coil.compose.AsyncImage
 import com.sniptube.android.data.library.*
 import com.sniptube.android.data.local.*
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionsScreen(snapshot: LibrarySnapshot, actions: LibraryActions, commands: LibraryCommands,
     jobs: List<ServerJobBindingEntity>, transfers: List<DeviceTransferBindingEntity>, onPlay: (VideoKey) -> Unit,
-    scrollStore: LibraryScrollStore) {
+    scrollStore: LibraryScrollStore, refreshing: Boolean = false, onRefresh: () -> Unit = {}) {
     var openedId by rememberSaveable { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<CollectionEntity?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -47,10 +48,11 @@ fun CollectionsScreen(snapshot: LibrarySnapshot, actions: LibraryActions, comman
     val members = snapshot.videos.filter { it.key in memberships }
     val visible = if (choosingMembers) snapshot.videos.filter { it.key !in memberships } else members
     val listState = rememberLibraryListState(scrollStore,
-        "collections:${collection?.id ?: "index"}:$choosingMembers", if (collection == null) snapshot.collections.size else visible.size)
+        "collections:${openedId ?: "index"}:$choosingMembers", if (openedId == null) snapshot.collections.size else visible.size)
     Column(Modifier.fillMaxSize()) {
-    LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
-        item {
+    PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
+    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
+        item(key = "collections-header") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (collection == null) {
                     Text("Collections", style = MaterialTheme.typography.headlineMedium)
@@ -149,6 +151,7 @@ fun CollectionsScreen(snapshot: LibrarySnapshot, actions: LibraryActions, comman
                 }
             }
         }
+    }
     }
     if (collection != null) SelectionHeader(selection, visible, commands.busy) { selected ->
         if (choosingMembers) Button(onClick = { commands.run {

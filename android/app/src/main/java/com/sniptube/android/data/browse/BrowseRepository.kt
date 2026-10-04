@@ -29,6 +29,7 @@ data class BrowseVideo(
     val serverStatus: String?,
     val serverFileSizeBytes: Long?,
     val source: BrowseSource,
+    val uploadDate: String? = null,
 )
 
 data class BrowsePage(
@@ -96,6 +97,7 @@ class BrowseRepository internal constructor(
                     serverStatus = serverVideo?.status,
                     serverFileSizeBytes = serverVideo?.fileSize,
                     source = BrowseSource.Search,
+                    uploadDate = result.uploadDate ?: serverVideo?.uploadDate,
                 )
             },
             page = response.page,
@@ -111,12 +113,24 @@ class BrowseRepository internal constructor(
             title = video.title ?: "Untitled video",
             durationMs = video.duration?.secondsToMilliseconds(),
             thumbnailUrl = video.thumbnailUrl,
-            uploader = null,
+            uploader = video.uploader,
             serverVideoId = video.id,
             serverStatus = video.status,
             serverFileSizeBytes = video.fileSize,
             source = BrowseSource.Library,
+            uploadDate = video.uploadDate,
         )
+    }.also { videos ->
+        // Refresh known phone metadata too, without creating queue intent or touching local files.
+        videos.forEach { video ->
+            offlineDao.getVideo(serverIdentity, video.youtubeId)?.let { old ->
+                if (video.uploadDate != null || video.uploader != null) offlineDao.upsertVideo(old.copy(
+                    uploadDate = video.uploadDate ?: old.uploadDate,
+                    uploader = video.uploader ?: old.uploader,
+                    metadataUpdatedAt = now(),
+                ))
+            }
+        }
     }
 
     override suspend fun enqueue(video: BrowseVideo): EnqueueResult {
@@ -137,6 +151,7 @@ class BrowseRepository internal constructor(
                 serverStatus = video.serverStatus,
                 serverFileSizeBytes = video.serverFileSizeBytes,
                 metadataUpdatedAt = timestamp,
+                uploadDate = video.uploadDate,
             ),
             requestedAt = timestamp,
         )

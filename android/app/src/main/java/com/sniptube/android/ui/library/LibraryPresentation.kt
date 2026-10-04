@@ -10,6 +10,9 @@ import com.sniptube.android.data.local.*
 import java.io.File
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.Locale
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 val OfflineVideoEntity.key get() = VideoKey(serverIdentity, youtubeId)
 val VideoKey.selectionId get() = "${serverIdentity.length}:$serverIdentity$youtubeId"
@@ -19,7 +22,15 @@ fun BrowseVideo.offlineMetadata(now: Long) = OfflineVideoEntity(
     serverVideoId = serverVideoId, title = title, durationMs = durationMs,
     thumbnailUrl = thumbnailUrl, uploader = uploader, serverStatus = serverStatus,
     serverFileSizeBytes = serverFileSizeBytes, metadataUpdatedAt = now,
+    uploadDate = uploadDate,
 )
+
+fun uploadDateText(value: String?): String? = value?.let {
+    runCatching {
+        val date = LocalDate.parse(it, if (it.length == 8) DateTimeFormatter.BASIC_ISO_DATE else DateTimeFormatter.ISO_LOCAL_DATE)
+        "Uploaded ${date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))}"
+    }.getOrNull()
+}
 
 /** Selection is scoped to the loaded, visible result set; pagination never selects future rows. */
 fun selectedVideos(videos: List<OfflineVideoEntity>, ids: List<String>): List<OfflineVideoEntity> {

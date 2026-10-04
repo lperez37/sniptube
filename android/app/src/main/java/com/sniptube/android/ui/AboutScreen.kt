@@ -22,7 +22,7 @@ fun AboutScreen() {
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Sniptube for Android", style = MaterialTheme.typography.headlineMedium)
+        Text("${context.getString(R.string.app_name)} for Android", style = MaterialTheme.typography.headlineMedium)
         Text("Version ${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}",
             style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         Text("Search, sync and watch your Sniptube library offline. Clips and GIFs stay in the web app.",

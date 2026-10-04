@@ -15,6 +15,31 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, manifest = Config.NONE)
 class CacheMigrationTest {
+    @Test fun uploadDateMigrationKeepsExistingVideoMetadata() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "upload-date-migration-test.db"
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context).name(name)
+                .callback(object : SupportSQLiteOpenHelper.Callback(3) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        db.execSQL("CREATE TABLE offline_videos (youtubeId TEXT PRIMARY KEY, title TEXT NOT NULL)")
+                    }
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                }).build(),
+        )
+        try {
+            val db = helper.writableDatabase
+            db.execSQL("INSERT INTO offline_videos VALUES ('old-id', 'Existing offline video')")
+            SniptubeDatabase.MIGRATIONS.single { it.startVersion == 3 }.migrate(db)
+            db.query("SELECT youtubeId, title, uploadDate FROM offline_videos").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("old-id", it.getString(0))
+                assertEquals("Existing offline video", it.getString(1))
+                assertTrue(it.isNull(2))
+            }
+        } finally { helper.close(); context.deleteDatabase(name) }
+    }
+
     @Test fun existingFileRowsRemainFilesAndNewBindingsGetNullableCacheKeys() {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val helper = FrameworkSQLiteOpenHelperFactory().create(
@@ -64,7 +89,7 @@ class CacheMigrationTest {
         try {
             val db = helper.writableDatabase
             db.execSQL("INSERT INTO playback_progress VALUES ('old-server', 'video', 91, 100, 1)")
-            SniptubeDatabase.MIGRATIONS.last().migrate(db)
+            SniptubeDatabase.MIGRATIONS.single { it.startVersion == 2 }.migrate(db)
             db.query("SELECT positionMs, durationMs, viewed FROM playback_progress").use {
                 assertTrue(it.moveToFirst())
                 assertEquals(91, it.getInt(0))

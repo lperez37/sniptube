@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -74,6 +75,12 @@ fun SniptubeApp(container: AppContainer, modifier: Modifier = Modifier) {
     val notificationRequest = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     var notificationDismissed by rememberSaveable { mutableStateOf(false) }
     val isPlayer = route == PLAYER_ROUTE
+    fun refresh() {
+        if (browse?.library?.loading == true) return
+        container.deviceTransfers.refreshPolicy()
+        container.acquisitionCoordinator.restore()
+        model?.refreshLibrary()
+    }
     fun play(key: VideoKey) { nav.navigate("player/${Uri.encode(key.serverIdentity)}/${Uri.encode(key.youtubeId)}") { launchSingleTop = true } }
     fun destination(target: String) {
         nav.navigate(target) {
@@ -83,21 +90,29 @@ fun SniptubeApp(container: AppContainer, modifier: Modifier = Modifier) {
         }
     }
     LaunchedEffect(browse?.notice) { browse?.notice?.let { snackbar.showSnackbar(it); model?.clearNotice() } }
+    LaunchedEffect(browse?.library?.error) {
+        browse?.library?.error?.let { if (route != "browse") snackbar.showSnackbar(it) }
+    }
     LaunchedEffect(commands, snackbar) { commands.messages.collect { snackbar.showSnackbar(it) } }
     Scaffold(modifier.fillMaxSize(), topBar = {
         if (!isPlayer) TopAppBar(title = {
-            if (route == "settings" || route == "about" || route == "connect") Text(when (route) {
-                "about" -> "About"; "connect" -> "Connect to Sniptube"; else -> "Server connection"
+            if (route == "settings" || route == "about" || route == "connect" || route == "jobs") Text(when (route) {
+                "about" -> "About"; "connect" -> "Connect to Sniptube"; "jobs" -> "Sync & downloads"; else -> "Server connection"
             }) else Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Image(painterResource(R.drawable.ic_sniptube), null, Modifier.size(28.dp))
-                Text("Sniptube", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
             }
         }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            navigationIcon = { if (route == "settings" || route == "about") IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-            actions = { if (route != "settings" && route != "about" && route != "connect") IconButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) { Icon(Icons.Default.Settings, "Server settings") } })
+            navigationIcon = { if (route == "settings" || route == "about" || route == "jobs") IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+            actions = {
+                if (route != "connect" && route != "jobs") JobsIndicator(snapshot) { nav.navigate("jobs") { launchSingleTop = true } }
+                if (route in listOf("downloads", "collections", "jobs")) IconButton(onClick = ::refresh,
+                    enabled = browse?.library?.loading != true) { Icon(Icons.Default.Refresh, "Refresh library and jobs") }
+                if (route != "settings" && route != "about" && route != "connect") IconButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) { Icon(Icons.Default.Settings, "Server settings") }
+            })
     }, bottomBar = {
-        if (!isPlayer && route != "settings" && route != "about" && route != "connect" && !keyboardVisible) NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+        if (!isPlayer && route != "settings" && route != "about" && route != "connect" && route != "jobs" && !keyboardVisible) NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
             listOf("browse" to "Browse", "collections" to "Collections", "downloads" to "Downloads").forEach { (target, label) ->
                 NavigationBarItem(selected = route == target, onClick = { destination(target) }, label = { Text(label) }, icon = {
                     Icon(when (target) { "browse" -> Icons.Default.Search; "collections" -> Icons.Default.CollectionsBookmark; else -> Icons.Default.DownloadForOffline }, null)
@@ -127,10 +142,14 @@ fun SniptubeApp(container: AppContainer, modifier: Modifier = Modifier) {
                             TextButton(onClick = { notificationDismissed = true }) { Text("Not now") }
                         }
                     }
-                    DownloadsScreen(snapshot, jobs, transfers, actions, commands, ::play, scrollStore)
+                    DownloadsScreen(snapshot, jobs, transfers, actions, commands, ::play, scrollStore,
+                        browse?.library?.loading == true, ::refresh)
                 }
             }
-            composable("collections") { CollectionsScreen(snapshot, actions, commands, jobs, transfers, ::play, scrollStore) }
+            composable("collections") { CollectionsScreen(snapshot, actions, commands, jobs, transfers, ::play, scrollStore,
+                browse?.library?.loading == true, ::refresh) }
+            composable("jobs") { JobsScreen(snapshot, jobs, transfers, actions, commands, scrollStore,
+                browse?.library?.loading == true, ::refresh) }
             composable("settings") { ConnectionScreen(container, onIdentityChanged = { serverIdentity = it },
                 onConnected = { nav.popBackStack() },
                 onAbout = { nav.navigate("about") { launchSingleTop = true } },

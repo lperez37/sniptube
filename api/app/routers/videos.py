@@ -30,7 +30,7 @@ def _source_file_size(video_id: str) -> int | None:
 
 
 def _read_meta_fields(video_id: str) -> dict:
-    """Read available_heights and source_height from meta.json."""
+    """Read source metadata, including the original YouTube publish date."""
     meta_path = settings.data_dir / "videos" / video_id / "meta.json"
     if meta_path.exists():
         try:
@@ -38,6 +38,8 @@ def _read_meta_fields(video_id: str) -> dict:
             return {
                 "available_heights": meta.get("available_heights", []),
                 "source_height": meta.get("source_height"),
+                "upload_date": meta.get("upload_date"),
+                "uploader": meta.get("uploader"),
             }
         except (json.JSONDecodeError, OSError):
             pass

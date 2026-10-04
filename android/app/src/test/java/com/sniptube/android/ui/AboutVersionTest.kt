@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.sniptube.android.BuildConfig
 import com.sniptube.android.R
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -16,7 +17,12 @@ class AboutVersionTest {
     @Test fun packagedChangelogStartsWithTheInstalledVersion() {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val first = context.resources.openRawResource(R.raw.changelog).bufferedReader().use { it.readLine() }
-        assertTrue("About history must match the build shown to users", first.startsWith("## ${BuildConfig.VERSION_NAME} "))
+        // Beta and regular packages share the same feature history; About also shows the exact suffix.
+        assertTrue("About history must match the build shown to users", first.startsWith("## ${BuildConfig.VERSION_NAME.substringBefore('-')} "))
         assertTrue("Shared APKs need a new Android version code", BuildConfig.VERSION_CODE >= 2)
+        if (BuildConfig.BUILD_TYPE == "beta") {
+            assertEquals("com.sniptube.android.beta", BuildConfig.APPLICATION_ID)
+            assertEquals("Sniptube Beta", context.getString(R.string.app_name))
+        }
     }
 }

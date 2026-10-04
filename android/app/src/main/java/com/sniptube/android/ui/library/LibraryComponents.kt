@@ -160,6 +160,8 @@ fun LibraryVideoRow(video: OfflineVideoEntity, selection: VideoSelection, status
                         maxLines = 2, overflow = TextOverflow.Ellipsis)
                     video.uploader?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    uploadDateText(video.uploadDate)?.let { Text(it,
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     status?.let { Text(it, style = MaterialTheme.typography.labelMedium,
                         color = if (it == "Ready offline") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2, overflow = TextOverflow.Ellipsis) }

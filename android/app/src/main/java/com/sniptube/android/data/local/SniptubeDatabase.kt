@@ -53,7 +53,7 @@ class DatabaseConverters {
         CollectionMembershipEntity::class,
         KeepOfflineExclusionEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -73,6 +73,10 @@ abstract class SniptubeDatabase : RoomDatabase() {
         }, object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE playback_progress ADD COLUMN viewed INTEGER NOT NULL DEFAULT 0")
+            }
+        }, object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE offline_videos ADD COLUMN uploadDate TEXT")
             }
         })
 

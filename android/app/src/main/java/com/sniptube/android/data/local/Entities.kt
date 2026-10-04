@@ -56,6 +56,7 @@ data class OfflineVideoEntity(
     val serverStatus: String? = null,
     val serverFileSizeBytes: Long? = null,
     val metadataUpdatedAt: Long,
+    val uploadDate: String? = null,
 )
 
 @Entity(

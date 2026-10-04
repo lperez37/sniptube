@@ -33,6 +33,12 @@ The native [Android app](android/README.md) searches YouTube through your Sniptu
 
 ### Build a debug APK
 
+Version **0.5.0** adds original YouTube upload dates to cards (also retained offline), pull-to-refresh at the top of Browse/Downloads/Collections/Jobs, and a top-bar sync badge opening all unfinished server and phone jobs. Search fields stay above their lists, loaded cards remain visible during refresh, and per-list offsets survive loading and playback navigation.
+
+The Android player hides its title and controls after **two seconds without interaction**, including when paused. Tap the top-right lock once to block player touches and in-app Back; **five taps within two seconds, at most 500 ms apart**, unlock it. The locked icon stays quietly visible in the same corner, with no ripple, counter or vibration. Android Home/system navigation remains available.
+
+**Sniptube Beta** is a separate install (`com.sniptube.android.beta`, version `0.5.0-beta`, build 5). It keeps its own server setting, collections and phone copies, so the existing Sniptube installation can stay installed. Build with `android/scripts/gradle.sh :app:assembleBeta`; the retained APK is `android/artifacts/last-successful-beta.apk`. The wrapper creates a development signing key in the gitignored, persistent `android/.signing/debug.keystore`; retain/back up that file for compatible future Beta updates. This Beta identity replaces the lost temporary-cache signing identity, not the installed app.
+
 On Linux x86_64, install Nix with flakes and Python 3. From the repository root:
 
 ```bash
@@ -144,7 +150,7 @@ An existing database record marked ready whose source file is missing is reporte
 curl http://localhost:8030/videos
 ```
 
-Returns an array of video objects with `id`, `title`, `duration`, `language`, `subtitles`, `status`, `thumbnail_url`.
+Returns an array of video objects with `id`, `title`, `duration`, `language`, `subtitles`, `status`, `thumbnail_url`, `uploader`, and `upload_date`. The nullable `upload_date` is the original YouTube publish date (`YYYYMMDD`), read from the saved source metadata for both list and detail responses. It is distinct from `created_at` (added to Sniptube); missing dates are omitted from cards rather than invented.
 
 ### Get Video Details
 
@@ -348,6 +354,10 @@ http://localhost:8030/files/videos/{videoId}/subs/{lang}.vtt
 ```
 
 ## Web UI
+
+Library and search cards show the original YouTube upload date when available. On touch devices, pull down while already at the top to refresh the current library/search and download status; the header Refresh button provides the same action. Returning from a video restores the prior library/search scroll offset and loaded library page count. Same-query refreshes keep existing cards visible while loading or offline. The PWA shell cache is versioned so updated clients receive these changes.
+
+UI state regressions: `node --test ui/tests/app.test.cjs`.
 
 Open **http://localhost:8030** in a browser. Responsive dark interface (Inter + JetBrains Mono) with purple accent, optimized for desktop, tablet, and mobile (480/768/1024px breakpoints). Installable as a PWA — the service worker caches the app shell for fast loads, while API calls always go to the network.
 

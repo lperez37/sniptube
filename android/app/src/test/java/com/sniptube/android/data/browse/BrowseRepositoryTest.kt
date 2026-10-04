@@ -34,6 +34,22 @@ class BrowseRepositoryTest {
 
     @After fun tearDown() = database.close()
 
+    @Test fun `upload date survives offline enqueue sparse updates and library refresh`() = runTest {
+        val remote = FakeRemote()
+        val dao = database.offlineDao()
+        val repo = BrowseRepository(SERVER, remote, dao, now = { 100 })
+        remote.results = listOf(result("alpha").copy(uploadDate = "20260915"))
+        val item = repo.search("travel", 1).videos.single()
+        assertEquals("20260915", item.uploadDate)
+        repo.enqueue(item)
+        dao.upsertVideo(dao.getVideo(SERVER, "alpha")!!.copy(uploadDate = null, metadataUpdatedAt = 200))
+        assertEquals("20260915", dao.getVideo(SERVER, "alpha")!!.uploadDate)
+        remote.videos = listOf(video("alpha", "ready").copy(uploadDate = "20260915", uploader = "Travel channel"))
+        assertEquals("20260915", repo.library().single().uploadDate)
+        assertEquals("Travel channel", dao.getVideo(SERVER, "alpha")!!.uploader)
+        assertEquals(1, dao.queueCount())
+    }
+
     @Test fun `search cross references every server status and honors bounded page metadata`() = runTest {
         val remote = FakeRemote()
         val repo = BrowseRepository(SERVER, remote, database.offlineDao()) { 100 }

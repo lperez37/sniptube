@@ -90,6 +90,7 @@ abstract class OfflineDao {
             durationMs = newest.durationMs ?: fallback?.durationMs,
             thumbnailUrl = newest.thumbnailUrl ?: fallback?.thumbnailUrl,
             uploader = newest.uploader ?: fallback?.uploader,
+            uploadDate = newest.uploadDate ?: fallback?.uploadDate,
             serverStatus = newest.serverStatus ?: fallback?.serverStatus,
             serverFileSizeBytes = newest.serverFileSizeBytes ?: fallback?.serverFileSizeBytes,
         ))

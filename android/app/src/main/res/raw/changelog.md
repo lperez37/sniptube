@@ -1,3 +1,12 @@
+## 0.5.0 (4 October 2026)
+- Sniptube Beta installs alongside Sniptube with its own server setting, offline files and collections.
+- Original YouTube upload dates appear on video cards and are saved for offline browsing.
+- Pull down at the top to refresh Search, Server library, Downloads, Collections and Jobs.
+- Search inputs stay above the results; refreshes retain cards and list positions survive loading and navigation.
+- A top-bar sync badge opens one list of server and phone jobs with progress, pause, resume and retry.
+- Player controls and title hide after two seconds without interaction, including while paused.
+- Tap the top-right lock to prevent accidental player touches and in-app Back. Unlock with five quick taps on the same quiet icon (within two seconds, no more than half a second apart). No tap counter, ripple or vibration.
+
 ## 0.4.0 (26 September 2026)
 - Collection videos become visibly watched after 90% playback, or when marked watched manually.
 - Icon actions have comfortable touch targets and list scroll positions return after playback.

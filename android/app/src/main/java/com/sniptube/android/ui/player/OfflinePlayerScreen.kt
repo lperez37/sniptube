@@ -5,18 +5,22 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.os.SystemClock
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -24,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -69,7 +75,8 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
     var asset by remember(serverIdentity, youtubeId) { mutableStateOf<OfflinePlaybackAsset?>(null) }
     var error by remember(serverIdentity, youtubeId) { mutableStateOf<String?>(null) }
     var skipNotice by remember { mutableStateOf<String?>(null) }
-    var showChrome by remember(serverIdentity, youtubeId) { mutableStateOf(true) }
+    val interaction = rememberSaveable(serverIdentity, youtubeId, saver = PlayerInteractionState.Saver) { PlayerInteractionState() }
+    var playerView by remember { mutableStateOf<PlayerView?>(null) }
     val player = remember(context, serverIdentity, youtubeId) {
         ExoPlayer.Builder(context, offlineRenderersFactory(context)).build().apply {
             setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
@@ -84,9 +91,14 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
             System.currentTimeMillis()))
     }
     val latestSave by rememberUpdatedState(newValue = { savePosition() })
-    BackHandler { onBack() }
+    BackHandler { if (!interaction.locked || error != null) onBack() }
     FullscreenWindow(asset != null && error == null)
     LaunchedEffect(skipNotice) { if (skipNotice != null) { delay(900); skipNotice = null } }
+    LaunchedEffect(error) { if (error != null) interaction.unlock() }
+    LaunchedEffect(interaction.locked) {
+        if (interaction.locked) { skipNotice = null; playerView?.hideController() }
+    }
+    PlayerChromeTimeout(interaction, asset != null && error == null) { playerView?.hideController() }
 
     DisposableEffect(player, lifecycle) {
         var resumeAfterPause = true
@@ -168,7 +180,14 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
                 }
                 else -> AndroidView(
                     modifier = Modifier.fillMaxSize().navigationBarsPadding(),
-                    factory = { viewContext -> PlayerView(viewContext).apply {
+                    factory = { viewContext -> object : PlayerView(viewContext) {
+                        override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                            if (interaction.locked) return true
+                            interaction.interact()
+                            return super.dispatchTouchEvent(event)
+                        }
+                    }.apply {
+                        playerView = this
                         this.player = player
                         keepScreenOn = true
                         setShowSubtitleButton(true)
@@ -176,9 +195,11 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
                         setShowFastForwardButton(true)
                         setShowNextButton(false)
                         setShowPreviousButton(false)
-                        setControllerShowTimeoutMs(3_000)
+                        setControllerShowTimeoutMs(PLAYER_CHROME_TIMEOUT_MS.toInt())
+                        setControllerAutoShow(false)
+                        setControllerAnimationEnabled(false)
                         setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
-                            showChrome = visibility == View.VISIBLE
+                            if (visibility == View.VISIBLE) interaction.showChrome() else interaction.hideChrome()
                         })
                         var doubleTapActive = false
                         var lastTapDownTime = -1L
@@ -224,7 +245,11 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
                             consume
                         }
                     } },
-                    update = { it.player = player },
+                    update = {
+                        it.player = player
+                        it.useController = !interaction.locked
+                        it.importantForAccessibility = if (interaction.locked) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+                    },
                     onRelease = {
                         it.setControllerVisibilityListener(null as PlayerView.ControllerVisibilityListener?)
                         it.player = null
@@ -232,9 +257,12 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
                     },
                 )
             }
-            AnimatedVisibility(visible = showChrome || error != null || asset == null,
-                modifier = Modifier.align(Alignment.TopCenter)) {
+            if (interaction.locked && error == null) Box(Modifier.fillMaxSize().pointerInput(Unit) {
+                awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+            })
+            if (!interaction.locked && (interaction.chromeVisible || error != null || asset == null)) {
             Row(Modifier.fillMaxWidth().background(Color(0xBB11111B))
+                .align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.displayCutout)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
@@ -242,7 +270,14 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
                 }
                 Text(asset?.title ?: "Offline player", Modifier.weight(1f), color = Color.White,
                     style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.width(56.dp))
             }
+            }
+            if (asset != null && error == null && (interaction.locked || interaction.chromeVisible)) {
+                Box(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.displayCutout)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    ChildLockButton(interaction)
+                }
             }
             skipNotice?.let { message ->
                 Surface(Modifier.align(Alignment.Center), color = Color(0xDD181825),
@@ -252,6 +287,32 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun PlayerChromeTimeout(state: PlayerInteractionState, enabled: Boolean, onHide: () -> Unit) {
+    val hide by rememberUpdatedState(onHide)
+    LaunchedEffect(enabled, state.locked, state.chromeVisible, state.interactionRevision) {
+        if (enabled && !state.locked && state.chromeVisible) {
+            delay(PLAYER_CHROME_TIMEOUT_MS)
+            state.hideChrome()
+            hide()
+        }
+    }
+}
+
+@Composable
+internal fun ChildLockButton(state: PlayerInteractionState) {
+    // No ripple, counter, haptic, animation or changing label for the first four taps.
+    Box(Modifier.size(48.dp).clickable(
+        interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button,
+        onClickLabel = if (state.locked) "Tap five times quickly to unlock" else "Enable child lock",
+        onClick = { state.tapLock(SystemClock.uptimeMillis()) },
+    ), contentAlignment = Alignment.Center) {
+        Icon(if (state.locked) Icons.Default.Lock else Icons.Default.LockOpen,
+            contentDescription = if (state.locked) "Child lock enabled" else "Enable child lock",
+            tint = Color.White.copy(alpha = if (state.locked) 0.4f else 1f), modifier = Modifier.size(22.dp))
     }
 }
 

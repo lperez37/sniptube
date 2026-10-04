@@ -56,6 +56,21 @@ class DiskGuardTests(unittest.TestCase):
 
 
 class ArtifactTests(unittest.TestCase):
+    def test_beta_is_retained_separately_from_the_existing_debug_apk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            retained = []
+            for variant in ("debug", "beta"):
+                source = root / f"app/build/outputs/apk/{variant}/app-{variant}.apk"
+                source.parent.mkdir(parents=True)
+                with zipfile.ZipFile(source, "w") as archive:
+                    archive.writestr("AndroidManifest.xml", variant)
+                retained.append(preserve_apk.preserve(root, variant))
+            self.assertNotEqual(retained[0], retained[1])
+            for variant, path in zip(("debug", "beta"), retained):
+                with zipfile.ZipFile(path) as archive:
+                    self.assertEqual(archive.read("AndroidManifest.xml").decode(), variant)
+
     def test_invalid_or_missing_new_apk_never_removes_previous(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -7,10 +7,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 
 data class ScrollPosition(val index: Int = 0, val offset: Int = 0)
 
@@ -32,22 +34,30 @@ fun rememberLibraryListState(store: LibraryScrollStore, key: String, videoCount:
         store.read(key).let { LazyListState(it.index, it.offset) }
     }
     var restored by remember(store, key) { mutableStateOf(false) }
+    val currentCount by rememberUpdatedState(videoCount)
     // Room may first emit an empty snapshot; wait for rows before allowing its layout to
     // overwrite the saved position with index 0. Each list also contains a header item.
-    LaunchedEffect(store, key, videoCount) {
-        if (!restored && videoCount > 0) {
+    LaunchedEffect(store, key, state, videoCount) {
+        if (videoCount == 0) {
+            restored = false
+            return@LaunchedEffect
+        }
+        // Restoration before the first populated measure is clamped to the empty header.
+        snapshotFlow { state.layoutInfo.totalItemsCount }.first { it >= videoCount + 1 }
+        if (!restored) {
             val previous = store.read(key)
             state.scrollToItem(previous.index.coerceAtMost(videoCount), previous.offset)
             restored = true
         }
+        snapshotFlow { state.layoutInfo.totalItemsCount to ScrollPosition(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) }
+            .distinctUntilChanged().collect {
+                if (currentCount > 0 && it.first > 1) store.save(key, it.second.index, it.second.offset)
+            }
     }
-    LaunchedEffect(store, key, state, restored) {
-        if (restored) snapshotFlow { ScrollPosition(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) }
-            .distinctUntilChanged().collect { store.save(key, it.index, it.offset) }
-    }
-    DisposableEffect(store, key, state, restored) {
+    DisposableEffect(store, key, state) {
         onDispose {
-            if (restored) store.save(key, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset)
+            if (restored && currentCount > 0 && state.layoutInfo.totalItemsCount > 1)
+                store.save(key, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset)
         }
     }
     return state

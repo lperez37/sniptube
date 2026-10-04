@@ -186,6 +186,8 @@ class ServerAcquisition(
                     title = it.title ?: previous.title,
                     durationMs = it.duration?.times(1_000)?.toLong() ?: previous.durationMs,
                     thumbnailUrl = it.thumbnailUrl ?: previous.thumbnailUrl,
+                    uploadDate = it.uploadDate ?: previous.uploadDate,
+                    uploader = it.uploader ?: previous.uploader,
                     serverFileSizeBytes = it.fileSize, metadataUpdatedAt = now())
             }, job, foreground, now(),
         )

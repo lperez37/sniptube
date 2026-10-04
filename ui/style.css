@@ -96,6 +96,30 @@
 }
 
 /* === Reset & Base === */
+html { overscroll-behavior-y: contain; }
+.pull-refresh {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+.upload-date {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
