@@ -1,3 +1,6 @@
+## 0.5.1 (6 October 2026)
+- Player lock sits 8dp farther from the screen edge and honors Android navigation-bar insets. While locked, hide visible Android navigation buttons; system-edge gestures can still reveal/use them.
+
 ## 0.5.0 (4 October 2026)
 - Sniptube Beta installs alongside Sniptube with its own server setting, offline files and collections.
 - Original YouTube upload dates appear on video cards and are saved for offline browsing.

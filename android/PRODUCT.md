@@ -44,7 +44,7 @@ Search YouTube or browse videos already hosted by Sniptube, add individual or mu
 - The About screen displays an incrementing build version and a packaged changelog. YouTube and Downloads search hide nonessential summary/selection/navigation chrome while the virtual keyboard is open.
 - Original YouTube publish dates appear on cards when available and remain stored offline. Pull-to-refresh and explicit refresh actions update metadata without silently changing transfer consent or restoring cleared copies.
 - A global jobs badge opens all unfinished server/device work. Search inputs remain outside lists and card offsets survive loading, pagination and player navigation.
-- Player title and controls hide after two seconds of inactivity. A top-right child lock blocks player touches and in-app Back until five quick taps on the same quiet icon (within two seconds, gaps ≤500 ms); OS Home/navigation remains available.
+- Player title and controls hide after two seconds of inactivity. A top-right child lock blocks player touches and in-app Back and hides visible system navigation buttons until five quick taps on the same quiet icon (within two seconds, gaps ≤500 ms). OS edge gestures remain reserved and may reveal transient controls.
 - Sniptube Beta is a separately installed package with isolated phone data. Its persistent development signing key is kept outside disposable SDK caches.
 
 ## Product Principles

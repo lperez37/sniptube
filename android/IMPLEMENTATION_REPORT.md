@@ -1,14 +1,20 @@
 # Sniptube Android — implementation handoff (4 October 2026)
 
-## Current release: Sniptube Beta 0.5.0
+## Current release: Sniptube Beta 0.5.1
 
-- Separate side-by-side package **com.sniptube.android.beta**, launcher name **Sniptube Beta**, version **0.5.0-beta**, code **5**. Own first-run URL, database, collections and offline media. The old regular APK remains retained separately.
+- Separate side-by-side package **com.sniptube.android.beta**, launcher name **Sniptube Beta**, version **0.5.1-beta**, code **6**. Own first-run URL, database, collections and offline media. The old regular APK remains retained separately.
 - Upload dates on shared Android cards, offline persistence through Room 3→4, metadata enrichment from library refresh, and nullable publish date/channel fields in server list/detail responses. Web library cards now show dates too.
 - Native pull-to-refresh for Search/Library/Downloads/Collections/Jobs with explicit button alternatives. Search inputs sit outside card lists. Reproduced an empty-layout scroll overwrite in a Compose/Robolectric test; fixed by waiting for populated layout and excluding empty measurements from saved offsets. Tests cover tab/player restoration and appended rows.
 - Global top-bar jobs badge opens a compact screen for unfinished server and phone work, real progress, pause/resume/retry. Refresh preserves existing network consent, exclusions and paused work.
-- Two-second chrome inactivity timeout independent of playback state. Child lock disables player touch/skip/controls and in-app Back; five taps within two seconds (≤500 ms between taps) unlock via the same subdued, ripple-free top-right target. Rotation preserves the lock. OS Home/navigation remains available.
+- Two-second chrome inactivity timeout independent of playback state. Child lock disables player touch/skip/controls and in-app Back; five taps within two seconds (≤500 ms between taps) unlock via the same subdued, ripple-free top-right target. Rotation preserves the lock. System-edge gestures can reveal system navigation controls.
+- 0.5.1 moves the lock target 8dp inward, applies Android navigation-bar insets and hides visible system navigation buttons during child lock. Android edge gestures can still reveal system controls; normal apps cannot disable OS navigation entirely.
 
-### Current verification
+### 0.5.1 verification
+
+- **101 Beta Android JVM/Robolectric tests pass**, including player system-bar visibility, five-tap lock, two-second chrome timeout, Room migration and list-position restoration. `:app:lintBeta :app:assembleBeta` passes. Beta `AboutVersionTest` verifies its package, label and version. Final version/build metadata is verified with `aapt`; signing identity stays unchanged for Beta upgrades.
+- The exact debug signing keystore is backed up in Wiki.js at `services/sniptube` → **Beta signing-key recovery**. The Base64 restore block was decoded and SHA-256 matched to the local keystore (`d80f7d8718344977ab0a9dc00351dec3749b77cf8c0f9a04f2c9fb79de2b090d`). The page includes alias/password, signing-certificate fingerprint and recovery steps. `CLAUDE.md` and `android/README.md` tell future agents to restore this file before Beta builds. The Wiki copy is intentionally recoverable by Wiki readers.
+
+### 0.5.0 verification
 
 - **100 Android JVM/Robolectric tests pass**, including real Compose list restoration, child-lock button clicks and inactivity timer, migration/data preservation and existing sync/offline tests.
 - `:app:lintDebug :app:lintBeta :app:assembleBeta` passed via the guarded wrapper: **0 lint errors**, six existing unused-resource warnings. APK signature verified with `apksigner`; `aapt` confirms package, Beta label, version, API 26/35.
@@ -17,10 +23,10 @@
 - Browser checked real web library → detail → Back restoration: **2061 px before and after**, plus visible original upload dates. A later mobile browser-automation session disconnected; no completed mobile-browser acceptance is claimed. Static UI scan reported only the incumbent Inter font warning, retained to preserve the existing visual identity.
 - No physical Android device/emulator playback or gesture acceptance. Check quiet five-tap dispatch, landscape/cutout placement, native pull gestures, TalkBack and Home/Back on the target phone. Automated tests do not prove codec playback or Android background policy.
 
-### Current APK
+### 0.5.1 APK
 
 - `android/artifacts/last-successful-beta.apk` (also `android/app/build/outputs/apk/beta/app-beta.apk`).
-- **21,317,912 bytes**; SHA-256 **`3c47a4ca0c3e8453845dcaf147d521867acce471df3b5c768c0f2bd0a3c859aa`**.
+- **21,318,239 bytes**; SHA-256 **`f84a29c1d3c8fdd6a992849bf3264195d07ae374dffed3fc3f909b6288bc24c0`**.
 - Persistent development signing key: gitignored `android/.signing/debug.keystore`. Certificate SHA-256: `84e5bdfcff19122f82131771b53536199f2edb5c61179bd0692d6771f9f590bc`.
 - The old key lived in a vanished `/dev/shm` SDK directory. Beta was explicitly requested to avoid replacing the installed app; do not uninstall the old app or promise an in-place regular-app update with this key. Back up the new key for future Beta updates.
 

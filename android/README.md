@@ -4,9 +4,9 @@ Native Android client for Sniptube. The project uses Kotlin, Jetpack Compose Mat
 
 ## Server connection
 
-### Sniptube Beta 0.5.0
+### Sniptube Beta 0.5.1
 
-The Beta build installs as **Sniptube Beta** (`com.sniptube.android.beta`, `0.5.0-beta`, code 5), alongside the existing app. It starts with its own server URL, collections and offline media. Use `android/scripts/gradle.sh :app:assembleBeta`; the wrapper retains `android/artifacts/last-successful-beta.apk` separately from the old debug APK. Signing uses the gitignored persistent `android/.signing/debug.keystore`, created once by the wrapper. Back up this key for future Beta upgrades; the previous regular APK's temporary signing key was lost on reboot.
+The Beta build installs as **Sniptube Beta** (`com.sniptube.android.beta`, `0.5.1-beta`, code 6), alongside the existing app. It starts with its own server URL, collections and offline media. Use `android/scripts/gradle.sh :app:assembleBeta`; the wrapper retains `android/artifacts/last-successful-beta.apk` separately from the old debug APK. Signing uses the gitignored persistent `android/.signing/debug.keystore`, created once by the wrapper. **Before any Beta build, check this file exists. If it is missing, restore it from Caselia Wiki `services/sniptube` → “Beta signing-key recovery” before running Gradle.** The wrapper creates a new signing key if absent, which would break Beta update compatibility. Never commit the key or copy its Base64 backup into Git. The previous regular APK's temporary signing key was lost on reboot.
 
 Video cards show **Uploaded [date]**, the original YouTube date, when supplied by Search or saved server metadata. Room 4 stores it for offline use through the additive 3→4 migration; sparse metadata never erases a known date. Refreshing the library fills dates/channel names for existing local records without altering their queue intent or files.
 
@@ -14,7 +14,7 @@ Pull down while already at the top of either Browse tab, Downloads, Collections 
 
 The top-bar sync badge opens **Sync & downloads**. It includes unfinished server preparation and phone transfers, including paused/waiting/failed items, with real progress and per-job pause/resume/retry. Only running work animates the badge. Completing the last item leaves an empty-state Jobs screen and removes the badge.
 
-**Child lock:** one tap on the player's top-right lock enables it; player controls, skip gestures and in-app Back are blocked. The same corner retains a subdued 48dp lock target. Five taps within two seconds, with no gap above 500 ms, unlock it. The first four taps have no visual change, ripple, count or vibration. Lock survives rotation; Android Home/system navigation remains available. Title and native controls hide after two seconds without interaction, including paused playback; touch reveals them when unlocked.
+**Child lock:** one tap on the player's top-right lock enables it; player controls, skip gestures and in-app Back are blocked. The subdued 48dp target is shifted inward and respects Android navigation-bar insets. The visible Android navigation buttons are hidden while locked, avoiding accidental Back/Home/Recents taps. Android reserves system-edge gestures, however, so a swipe can reveal transient system controls; a regular app cannot disable OS navigation. Five taps within two seconds, with no gap above 500 ms, unlock it. The first four taps have no visual change, ripple, count or vibration. Lock survives rotation. Title and native controls hide after two seconds without interaction, including paused playback; touch reveals them when unlocked.
 
 ### Setup
 

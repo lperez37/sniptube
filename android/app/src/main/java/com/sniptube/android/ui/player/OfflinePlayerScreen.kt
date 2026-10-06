@@ -92,7 +92,7 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
     }
     val latestSave by rememberUpdatedState(newValue = { savePosition() })
     BackHandler { if (!interaction.locked || error != null) onBack() }
-    FullscreenWindow(asset != null && error == null)
+    FullscreenWindow(asset != null && error == null, interaction.locked)
     LaunchedEffect(skipNotice) { if (skipNotice != null) { delay(900); skipNotice = null } }
     LaunchedEffect(error) { if (error != null) interaction.unlock() }
     LaunchedEffect(interaction.locked) {
@@ -275,7 +275,8 @@ fun OfflinePlayerScreen(container: AppContainer, serverIdentity: String, youtube
             }
             if (asset != null && error == null && (interaction.locked || interaction.chromeVisible)) {
                 Box(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.displayCutout)
-                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(start = 12.dp, end = 20.dp, top = 8.dp, bottom = 8.dp)) {
                     ChildLockButton(interaction)
                 }
             }
@@ -316,13 +317,16 @@ internal fun ChildLockButton(state: PlayerInteractionState) {
     }
 }
 
+internal fun hiddenPlayerSystemBars(childLocked: Boolean): Int =
+    WindowInsetsCompat.Type.statusBars() or
+        if (childLocked) WindowInsetsCompat.Type.navigationBars() else 0
+
 @Composable
-private fun FullscreenWindow(fullscreen: Boolean) {
+private fun FullscreenWindow(fullscreen: Boolean, childLocked: Boolean) {
     val activity = LocalContext.current.activity()
     val originalOrientation = rememberSaveable {
         activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
-    val statusVisible = rememberSaveable { true }
     DisposableEffect(activity, fullscreen) {
         val window = activity?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
@@ -330,15 +334,20 @@ private fun FullscreenWindow(fullscreen: Boolean) {
         if (fullscreen && activity != null) {
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller?.hide(WindowInsetsCompat.Type.statusBars())
         }
         onDispose {
             if (fullscreen) {
                 if (activity?.isChangingConfigurations != true) activity?.requestedOrientation = originalOrientation
                 if (behavior != null) controller?.systemBarsBehavior = behavior
-                if (statusVisible) controller?.show(WindowInsetsCompat.Type.statusBars())
-                else controller?.hide(WindowInsetsCompat.Type.statusBars())
+                controller?.show(WindowInsetsCompat.Type.systemBars())
             }
+        }
+    }
+    LaunchedEffect(activity, fullscreen, childLocked) {
+        val controller = activity?.window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        if (fullscreen) {
+            controller?.hide(hiddenPlayerSystemBars(childLocked))
+            if (!childLocked) controller?.show(WindowInsetsCompat.Type.navigationBars())
         }
     }
 }

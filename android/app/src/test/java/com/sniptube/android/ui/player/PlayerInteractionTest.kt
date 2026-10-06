@@ -1,6 +1,7 @@
 package com.sniptube.android.ui.player
 
 import android.app.Application
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +22,15 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35], application = Application::class)
 class PlayerInteractionTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun systemNavigationButtonsHideOnlyWhileChildLocked() {
+        val status = WindowInsetsCompat.Type.statusBars()
+        val navigation = WindowInsetsCompat.Type.navigationBars()
+        assertTrue(hiddenPlayerSystemBars(false) and status != 0)
+        assertEquals(0, hiddenPlayerSystemBars(false) and navigation)
+        assertTrue(hiddenPlayerSystemBars(true) and status != 0)
+        assertTrue(hiddenPlayerSystemBars(true) and navigation != 0)
+    }
 
     @Test fun chromeHidesAfterTwoSecondsAndOnlyInteractionRestartsTimeout() {
         val state = PlayerInteractionState()
